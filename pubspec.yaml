@@ -1,0 +1,55 @@
+name: groovyn
+description: "A new Flutter project."
+
+publish_to: 'none'
+
+version: 3.3.3+5
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  firebase_core:
+  cloud_firestore:
+  flutter_easyloading:
+  firebase_auth:
+  google_fonts:
+  firebase_storage:
+  fan_carousel_image_slider:
+  flutter_card_swiper:
+  flutter_staggered_grid_view:
+  intl:
+  image_picker:
+  carousel_slider_plus:
+  flutter_cashfree_pg_sdk:
+  flutter_dotenv:
+  http:
+  webview_flutter:
+  flexi_productimage_slider:
+  pull_to_refresh:
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints:
+
+flutter:
+
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/svgs/
+    - assets/icons/
+    - .env
+  fonts:
+    - family: Montserrat
+      fonts:
+        - asset: fonts/Montserrat-VariableFont_wght.ttf
+    - family: Baloo
+      fonts:
+        - asset: fonts/Baloo2-VariableFont_wght.ttf

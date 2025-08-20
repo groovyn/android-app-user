@@ -1,0 +1,1 @@
+{"flutter":{"platforms":{"android":{"default":{"projectId":"carewise-sartec","appId":"1:12784698277:android:ab8e8977fcfd66b40d5e4c","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"carewise-sartec","configurations":{"android":"1:12784698277:android:ab8e8977fcfd66b40d5e4c","ios":"1:12784698277:ios:e8b451e69af7f64f0d5e4c"}}}}}}

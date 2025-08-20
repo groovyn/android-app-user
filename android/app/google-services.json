@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1003467172334",
+    "project_id": "groovyn-tech",
+    "storage_bucket": "groovyn-tech.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1003467172334:android:d8a434f2bc974416fd46ff",
+        "android_client_info": {
+          "package_name": "com.groovyn.user"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBMXzgYq6zSNKYjnhfPov7XvgY7_kSF9U0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
