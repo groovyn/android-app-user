@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/user/cart/shipping_address.dart';
 import 'package:groovyn/main.dart';
+import 'package:groovyn/widgets/premium_loading.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 
 class CartPage extends StatefulWidget{
   const CartPage({super.key});
@@ -90,14 +92,13 @@ class CartPageState extends State<CartPage> {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.only(left: 20.0, right: 20.0),
-                    child: isLoading ? Center(child: SizedBox(
-                      width: 50,
-                      height: 50,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 8,
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                      ),
-                    ))
+                    child: isLoading ? Center(
+                      child: PremiumLoadingWidget(
+                        message: "Loading your cart...",
+                        size: 80,
+                        color: Colors.black,
+                      )
+                    )
                     : SingleChildScrollView(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,13 +182,12 @@ class CartPageState extends State<CartPage> {
                                           child: Column(
                                             children: [
                                               Expanded(
-                                                child: Container(
-                                                  decoration: ShapeDecoration(
-                                                    image: DecorationImage(
-                                                      image: NetworkImage(cartProductImages[index]),
-                                                      fit: BoxFit.fill,
-                                                    ),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                                                child: ClipRRect(
+                                                  borderRadius: BorderRadius.circular(5),
+                                                  child: CustomImageWidget(
+                                                    imageUrl: cartProductImages[index],
+                                                    fit: BoxFit.fill,
+                                                    borderRadius: BorderRadius.circular(5),
                                                   ),
                                                 ),
                                               ),

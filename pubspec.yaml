@@ -16,6 +16,7 @@ dependencies:
   cloud_firestore:
   flutter_easyloading:
   firebase_auth:
+  google_sign_in:
   google_fonts:
   firebase_storage:
   fan_carousel_image_slider:

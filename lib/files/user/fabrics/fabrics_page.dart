@@ -5,10 +5,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/user/fabrics/fabrics_listing.dart';
 import 'package:groovyn/files/user/product/product_page.dart';
 import 'package:groovyn/main.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 
 import '../cart/cart_page.dart';
-import '../mains/main_landing.dart';
+import '../mains/main_landing.dart'; // This exports HomePage
 import '../profile/profile_page.dart';
 import '../profile/wish_list.dart';
 
@@ -217,12 +218,21 @@ class FabricsPageState extends State<FabricsPage> {
                       ),
                       child: Row(
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Image.asset(
-                              'assets/icons/img_8.png',
-                              width: 40,
-                              height: 40,
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(builder: (context) => const HomePage()),
+                                (route) => false,
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child: Image.asset(
+                                'assets/icons/img_8.png',
+                                width: 40,
+                                height: 40,
+                              ),
                             ),
                           ),
                           Flexible(
@@ -236,7 +246,7 @@ class FabricsPageState extends State<FabricsPage> {
                                   decoration: InputDecoration(
                                     border: InputBorder.none,
                                     contentPadding: EdgeInsets.only(top: 8, bottom: 12, left: 8),
-                                    hintText: 'Search',
+                                    hintText: 'Search fabrics, materials...',
                                     enabled: false,
                                     hintStyle: GoogleFonts.montserrat(
                                       textStyle: GoogleFonts.poppins(
@@ -440,20 +450,12 @@ class FabricsPageState extends State<FabricsPage> {
                                                 topRight: Radius.circular(10),
                                               ),
                                             ),
-                                            child: ClipRRect(
-                                              borderRadius: BorderRadius.only(
+                                            child: CustomImageWidget(
+                                              imageUrl: fabric['businessImage'],
+                                              fit: BoxFit.fill,
+                                              borderRadius: const BorderRadius.only(
                                                 topLeft: Radius.circular(10),
                                                 topRight: Radius.circular(10),
-                                              ),
-                                              child: Image.network(
-                                                fabric['businessImage'],
-                                                fit: BoxFit.fill,
-                                                loadingBuilder: (context, child, loadingProgress) {
-                                                  if (loadingProgress == null) return child;
-                                                  return Center(
-                                                    child: CircularProgressIndicator(),
-                                                  );
-                                                },
                                               ),
                                             ),
                                           ),
@@ -623,20 +625,12 @@ class FabricsPageState extends State<FabricsPage> {
                                               ),
                                               child: Padding(
                                                 padding: const EdgeInsets.all(0.0),
-                                                child: ClipRRect(
-                                                  borderRadius: BorderRadius.only(
+                                                child: CustomImageWidget(
+                                                  imageUrl: fabric['productImages'][0],
+                                                  fit: BoxFit.cover,
+                                                  borderRadius: const BorderRadius.only(
                                                     topLeft: Radius.circular(10),
                                                     topRight: Radius.circular(10),
-                                                  ),
-                                                  child: Image.network(
-                                                    fabric['productImages'][0],
-                                                    fit: BoxFit.cover,
-                                                    loadingBuilder: (context, child, loadingProgress) {
-                                                      if (loadingProgress == null) return child;
-                                                      return Center(
-                                                        child: CircularProgressIndicator(),
-                                                      );
-                                                    },
                                                   ),
                                                 ),
                                               ),

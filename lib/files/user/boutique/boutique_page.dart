@@ -5,10 +5,13 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/main.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
+import 'package:groovyn/widgets/fashion_refresh_header.dart';
 
 import '../cart/cart_page.dart';
 import '../mains/listing_page.dart';
 import '../mains/main_landing.dart';
+import 'boutique_product.dart';
 import '../product/product_page.dart';
 import '../profile/profile_page.dart';
 import '../profile/wish_list.dart';
@@ -47,41 +50,49 @@ class BoutiquePageState extends State<BoutiquePage> {
   List<Widget> imageSliders = [];
 
   Future<void> fetchBoutiques() async {
-    QuerySnapshot querySnapshot = await FirebaseFirestore.instance.collection('stores').get();
+    QuerySnapshot querySnapshot = await FirebaseFirestore.instance
+        .collection('stores')
+        .where('businessField', isEqualTo: 'Boutique')
+        .get();
 
     List<Map<String, dynamic>> fetchedBoutiques = [];
 
     for (var doc in querySnapshot.docs) {
-      if(doc['businessField'] == 'Boutique') {
-        var storeData = doc.data() as Map<String, dynamic>;
-        storeData['documentID'] = doc.id;
-        fetchedBoutiques.add(storeData);
-      }
+      var storeData = doc.data() as Map<String, dynamic>;
+      storeData['documentID'] = doc.id;
+      fetchedBoutiques.add(storeData);
     }
 
     setState(() {
       boutiques = fetchedBoutiques;
       imageSliders = boutiques.map((item) {
-        return Container(
-          width: MediaQuery.of(context).size.width,
-          height: 600,
-          decoration: ShapeDecoration(
-            color: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => BoutiqueProduct(
+                  storeID: item['documentID'],
+                ),
+              ),
+            );
+          },
+          child: Container(
+            width: MediaQuery.of(context).size.width,
+            height: 600,
+            decoration: ShapeDecoration(
+              color: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.network(
-              item['businessImages'][0],
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return const Center(
-                  child: CircularProgressIndicator(),
-                );
-              },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: CustomImageWidget(
+                imageUrl: item['businessImages'][0],
+                fit: BoxFit.cover,
+                showShimmer: true,
+              ),
             ),
           ),
         );
@@ -95,16 +106,48 @@ class BoutiquePageState extends State<BoutiquePage> {
         .where('status', isEqualTo: true)
         .where('trending', isEqualTo: true)
         .get();
+    
     List<Map<String, dynamic>> fetchedRentals = [];
+    List<String> storeIds = [];
+    
+    // Extract unique store IDs
+    for (var doc in querySnapshot.docs) {
+      var productData = doc.data() as Map<String, dynamic>;
+      String storeId = productData['productStoreID'];
+      if (!storeIds.contains(storeId)) {
+        storeIds.add(storeId);
+      }
+    }
+    
+    // Batch fetch store data
+    Map<String, Map<String, dynamic>> storeDataCache = {};
+    if (storeIds.isNotEmpty) {
+      QuerySnapshot storeSnapshot = await FirebaseFirestore.instance
+          .collection('stores')
+          .where(FieldPath.documentId, whereIn: storeIds)
+          .get();
+      
+      for (var storeDoc in storeSnapshot.docs) {
+        storeDataCache[storeDoc.id] = storeDoc.data() as Map<String, dynamic>;
+      }
+    }
 
+    // Process products with cached store data
     for (var doc in querySnapshot.docs) {
       var productData = doc.data() as Map<String, dynamic>;
       productData['documentID'] = doc.id;
-      Map<String, String> map = await fetchReviews(doc.id);
-      productData['total'] =  map['total'];
-      productData['rating'] =  map['rating'];
-      DocumentSnapshot storeDoc = await FirebaseFirestore.instance.collection('stores').doc(productData['productStoreID']).get();
-      if (storeDoc.exists && storeDoc['businessField'] == 'Boutique') {
+      
+      String storeId = productData['productStoreID'];
+      if (storeDataCache.containsKey(storeId) && 
+          storeDataCache[storeId]!['businessField'] == 'Boutique') {
+        
+        // Add discount information
+        productData['discount'] = _calculateDiscount(productData);
+        
+        Map<String, String> reviewMap = await fetchReviews(doc.id);
+        productData['total'] = reviewMap['total'];
+        productData['rating'] = reviewMap['rating'];
+        
         fetchedRentals.add(productData);
       }
     }
@@ -164,6 +207,76 @@ class BoutiquePageState extends State<BoutiquePage> {
     return {};
   }
 
+  Map<String, dynamic>? _calculateDiscount(Map<String, dynamic> product) {
+    int currentPrice = int.parse(product['productPrice'].toString());
+    int originalPrice = int.parse(product['originalPrice']?.toString() ?? currentPrice.toString());
+    
+    if (originalPrice > currentPrice) {
+      double discountPercentage = ((originalPrice - currentPrice) / originalPrice) * 100;
+      return {
+        'originalPrice': originalPrice,
+        'discountPercentage': discountPercentage.round(),
+        'savings': originalPrice - currentPrice,
+      };
+    }
+    return null;
+  }
+
+  List<Widget> _buildPriceSection(Map<String, dynamic> product) {
+    List<Widget> priceWidgets = [];
+    int price = int.parse(product['productPrice'].toString());
+    Map<String, dynamic>? discount = product['discount'];
+    
+    priceWidgets.add(
+      Text(
+        '₹$price',
+        style: GoogleFonts.poppins(
+          textStyle: const TextStyle(
+            color: Colors.black,
+            fontSize: 16,
+            fontFamily: 'Manrope',
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+    
+    if (discount != null) {
+      priceWidgets.add(const SizedBox(width: 6));
+      priceWidgets.add(
+        Text(
+          '₹${discount['originalPrice']}',
+          style: GoogleFonts.poppins(
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: Colors.grey.shade500,
+            decoration: TextDecoration.lineThrough,
+          ),
+        ),
+      );
+      priceWidgets.add(const SizedBox(width: 4));
+      priceWidgets.add(
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.green,
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            '${discount['discountPercentage']}% OFF',
+            style: GoogleFonts.poppins(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      );
+    }
+    
+    return priceWidgets;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -179,26 +292,7 @@ class BoutiquePageState extends State<BoutiquePage> {
               controller: _refreshController,
               enablePullDown: true,
               onRefresh: _handleRefresh,
-              header: CustomHeader(
-                builder: (context, mode) {
-                  return Center(
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 90.0),
-                          child: Center(
-                            child: Image.asset(
-                              'assets/images/loading.gif',
-                              height: 100,
-                              width: 100,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+              header: FashionRefreshHeader(customText: "Pull for boutique updates"),
               child: ListView(
                 children: [
                   Padding(
@@ -222,12 +316,21 @@ class BoutiquePageState extends State<BoutiquePage> {
                       ),
                       child: Row(
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Image.asset(
-                              'assets/icons/img_8.png',
-                              width: 40,
-                              height: 40,
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(builder: (context) => const HomePage()),
+                                (route) => false,
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child: Image.asset(
+                                'assets/icons/img_8.png',
+                                width: 40,
+                                height: 40,
+                              ),
                             ),
                           ),
                           Expanded(
@@ -241,7 +344,7 @@ class BoutiquePageState extends State<BoutiquePage> {
                                   decoration: InputDecoration(
                                     border: InputBorder.none,
                                     contentPadding: EdgeInsets.only(top: 8, bottom: 12, left: 8),
-                                    hintText: 'Search',
+                                    hintText: 'Search boutiques, designs...',
                                     enabled: false,
                                     hintStyle: GoogleFonts.montserrat(
                                       textStyle: GoogleFonts.poppins(
@@ -361,7 +464,7 @@ class BoutiquePageState extends State<BoutiquePage> {
                                             decoration: ShapeDecoration(
                                               color: Colors.white,
                                               shape: RoundedRectangleBorder(
-                                                side: BorderSide(color: Colors.black.withOpacity(0.1)),
+                                                side: const BorderSide(color: Color.fromRGBO(0, 0, 0, 0.1)),
                                                 borderRadius: BorderRadius.circular(20),
                                               ),
                                               shadows: [
@@ -407,21 +510,14 @@ class BoutiquePageState extends State<BoutiquePage> {
                                                       flex: 3,
                                                       child: SizedBox(
                                                         width: MediaQuery.of(context).size.width,
-                                                        child: ClipRRect(
+                                                        child: CustomImageWidget(
+                                                          imageUrl: boutique['businessImages'][0],
+                                                          fit: BoxFit.fill,
                                                           borderRadius: const BorderRadius.only(
                                                             topLeft: Radius.circular(10),
                                                             topRight: Radius.circular(10),
                                                           ),
-                                                          child: Image.network(
-                                                            boutique['businessImages'][0],
-                                                            fit: BoxFit.fill,
-                                                            loadingBuilder: (context, child, loadingProgress) {
-                                                              if (loadingProgress == null) return child;
-                                                              return const Center(
-                                                                child: CircularProgressIndicator(),
-                                                              );
-                                                            },
-                                                          ),
+                                                          showShimmer: true,
                                                         ),
                                                       ),
                                                     ),
@@ -503,7 +599,7 @@ class BoutiquePageState extends State<BoutiquePage> {
                                   ),
                                   const SizedBox(height: 12,),
                                   Text(
-                                    'Latest Designs',
+                                    'Trending Designers',
                                     style: GoogleFonts.poppins(
                                       textStyle: TextStyle(
                                         color: Colors.black,
@@ -515,7 +611,7 @@ class BoutiquePageState extends State<BoutiquePage> {
                                   ),
                                   const SizedBox(height: 4,),
                                   Text(
-                                    'for you',
+                                    'Connect with top designers',
                                     style: GoogleFonts.poppins(
                                       textStyle: TextStyle(
                                         color: Colors.black,
@@ -528,7 +624,7 @@ class BoutiquePageState extends State<BoutiquePage> {
                                   const SizedBox(height: 15,),
                                   GestureDetector(
                                     onTap: (){
-                                      Navigator.push(context, MaterialPageRoute(builder: (context)=> const BoutiqueListing()));
+                                      Navigator.push(context, MaterialPageRoute(builder: (context)=> const ListingPage(isSearch: false, categoryType: 'boutique_trending')));
                                     },
                                     child: Padding(
                                       padding: const EdgeInsets.only(left: 12.0, right: 12.0, bottom: 12.0),
@@ -558,20 +654,38 @@ class BoutiquePageState extends State<BoutiquePage> {
                           const SizedBox(height: 30,),
                           Padding(
                             padding: const EdgeInsets.only(left: 20.0, right: 20.0),
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Boutiques near you',
-                                style: GoogleFonts.poppins(
-                                  textStyle: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 20,
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w700,
-                                    height: 0.03,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  'Boutiques near you',
+                                  style: GoogleFonts.poppins(
+                                    textStyle: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 20,
+                                      fontFamily: 'Poppins',
+                                      fontWeight: FontWeight.w700,
+                                      height: 0.03,
+                                    ),
                                   ),
                                 ),
-                              ),
+                                GestureDetector(
+                                  onTap: (){
+                                    Navigator.push(context, MaterialPageRoute(builder: (context)=> const BoutiqueListing()));
+                                  },
+                                  child: Text(
+                                    'View all',
+                                    style: GoogleFonts.poppins(
+                                      textStyle: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 10,
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.w400,
+                                      ),
+                                    )
+                                  )
+                                ),
+                              ],
                             ),
                           ),
                           const SizedBox(height: 30,),
@@ -625,7 +739,7 @@ class BoutiquePageState extends State<BoutiquePage> {
                           Padding(
                       padding: const EdgeInsets.only(left: 20.0),
                       child: SizedBox(
-                        height: 320,
+                        height: 340,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
                           itemCount: rentals.length,
@@ -670,18 +784,11 @@ class BoutiquePageState extends State<BoutiquePage> {
                                           flex: 3,
                                           child: SizedBox(
                                             width: MediaQuery.of(context).size.width,
-                                            child: ClipRRect(
+                                            child: CustomImageWidget(
+                                              imageUrl: rental['productImages'][0],
+                                              fit: BoxFit.fill,
                                               borderRadius: BorderRadius.circular(8),
-                                              child: Image.network(
-                                                rental['productImages'][0],
-                                                fit: BoxFit.fill,
-                                                loadingBuilder: (context, child, loadingProgress) {
-                                                  if (loadingProgress == null) return child;
-                                                  return Center(
-                                                    child: CircularProgressIndicator(),
-                                                  );
-                                                },
-                                              ),
+                                              showShimmer: true,
                                             ),
                                           ),
                                         ),
@@ -735,23 +842,15 @@ class BoutiquePageState extends State<BoutiquePage> {
                                               const SizedBox(height: 4),
                                               Row(
                                                 children: [
-                                                  Text(
-                                                    '₹${rental['productPrice'] ?? '0'}',
-                                                    style: GoogleFonts.poppins(
-                                                      textStyle: const TextStyle(
-                                                        color: Colors.black,
-                                                        fontSize: 16,
-                                                        fontFamily: 'Manrope',
-                                                        fontWeight: FontWeight.w400,
-                                                      ),
-                                                    ),
-                                                  ),
+                                                  ..._buildPriceSection(rental),
+                                                  const SizedBox(width: 8),
                                                   Spacer(),
                                                   Row(
                                                     children: [
                                                       Icon(
                                                         Icons.star,
-                                                        color: Colors.yellow,
+                                                        color: Colors.green,
+                                                        size: 16,
                                                       ),
                                                       const SizedBox(width: 4),
                                                       Text(

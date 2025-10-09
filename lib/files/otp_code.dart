@@ -197,7 +197,7 @@ class OTPCodeState extends State<OTPCode> {
       clipBehavior: Clip.antiAlias,
       decoration: ShapeDecoration(
         color: editControllers[value].text.isEmpty
-            ? const Color(0xFF4EA778).withOpacity(0.6)
+            ? const Color.fromRGBO(78, 167, 120, 0.6)
             : Colors.white,
         shape: RoundedRectangleBorder(
           side: const BorderSide(width: 1.23, color: Color(0xFF3A3E48)),

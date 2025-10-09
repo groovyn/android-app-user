@@ -72,7 +72,7 @@ class IntroPageState extends State<IntroPage> {
                           width: MediaQuery.of(context).size.width,
                           height: 56,
                           decoration: ShapeDecoration(
-                            color: Colors.black.withOpacity(0.800000011920929),
+                            color: const Color.fromRGBO(0, 0, 0, 0.8),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(50),
                             ),

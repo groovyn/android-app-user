@@ -10,12 +10,14 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/auth/login_path/intro_page.dart';
 import 'package:groovyn/files/user/profile/update_profile_page.dart';
 import 'package:groovyn/files/user/profile/wish_list.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../../main.dart';
 import '../mains/main_landing.dart';
 import '../orders/orders_page.dart';
+import '../appointments/appointments_page.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -226,8 +228,9 @@ class ProfilePageState extends State<ProfilePage> {
                 Expanded(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                    child: Column(
-                      children: [
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
@@ -271,11 +274,12 @@ class ProfilePageState extends State<ProfilePage> {
                                       height: 46,
                                       color: Colors.black,
                                       child: theProfile.isNotEmpty
-                                          ? Image.network(
-                                        theProfile,
+                                          ? CustomImageWidget(
+                                        imageUrl: theProfile,
                                         width: 46,
                                         height: 46,
                                         fit: BoxFit.cover,
+                                        borderRadius: BorderRadius.circular(999),
                                       )
                                           : null,
                                     ),
@@ -355,6 +359,7 @@ class ProfilePageState extends State<ProfilePage> {
                         ),
                         SizedBox(height: height * 0.03),
                         buildRow('Orders'),
+                        buildRow('Appointments'),
                         buildRow('Coupons'),
                         buildRow('Wishlist'),
                         buildRow('Size Details'),
@@ -363,7 +368,7 @@ class ProfilePageState extends State<ProfilePage> {
                         buildRow('Help'),
                         buildRow('Return & Refund Policy'),
                         buildRow('Terms & Conditions'),
-                        Expanded(child: SizedBox(height: height * 0.03)),
+                        SizedBox(height: height * 0.03),
                         GestureDetector(
                           onTap: deleteAccount,
                           child: Container(
@@ -420,7 +425,8 @@ class ProfilePageState extends State<ProfilePage> {
                           ),
                         ),
                         SizedBox(height: height * 0.02),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -491,6 +497,9 @@ class ProfilePageState extends State<ProfilePage> {
         }
         if(title == 'Orders') {
           Navigator.push(context, MaterialPageRoute(builder: (context)=> const OrdersPage()));
+        }
+        if(title == 'Appointments') {
+          Navigator.push(context, MaterialPageRoute(builder: (context)=> const AppointmentsPage()));
         }
       },
       child: Padding(

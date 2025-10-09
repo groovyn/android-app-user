@@ -4,8 +4,10 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/user/mains/main_landing.dart';
 import 'package:groovyn/main.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 
 import '../cart/cart_page.dart';
+import '../product/product_page.dart';
 
 class BoutiqueProduct extends StatefulWidget{
   final String storeID;
@@ -307,19 +309,11 @@ class BoutiqueProductState extends State<BoutiqueProduct> {
                                         numberOfCardsDisplayed: pictures.length > 1 ? 2 : 1,
                                         maxAngle: 250,
                                         cardBuilder: (context, index, percentThresholdX, percentThresholdY) =>
-                                          ClipRRect(
+                                          CustomImageWidget(
+                                            imageUrl: pictures[index],
+                                            width: MediaQuery.of(context).size.width - 40,
+                                            fit: BoxFit.fill,
                                             borderRadius: BorderRadius.circular(20),
-                                            child: Image.network(
-                                              pictures[index],
-                                              width: MediaQuery.of(context).size.width - 40,
-                                              fit: BoxFit.fill,
-                                              loadingBuilder: (context, child, loadingProgress) {
-                                                if (loadingProgress == null) return child;
-                                                return Center(
-                                                  child: CircularProgressIndicator(),
-                                                );
-                                              },
-                                            ),
                                           ),
                                       ),
                                     ),
@@ -479,7 +473,18 @@ class BoutiqueProductState extends State<BoutiqueProduct> {
         itemCount: rentals.length,
         itemBuilder: (context, index) {
           var rental = rentals[index];
-          return Container(
+          return GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ProductPage(
+                    productID: rental['documentID'],
+                  ),
+                ),
+              );
+            },
+            child: Container(
             decoration: ShapeDecoration(
               color: Colors.white,
               shape: RoundedRectangleBorder(
@@ -504,11 +509,14 @@ class BoutiqueProductState extends State<BoutiqueProduct> {
                     ),
                     child: Stack(
                       children: [
-                        Image.network(
-                          rental['productImages'][0],
+                        CustomImageWidget(
+                          imageUrl: rental['productImages'][0],
                           fit: BoxFit.cover,
                           width: double.infinity,
                           height: double.infinity,
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(8.0),
+                          ),
                         ),
                         Positioned(
                           bottom: 8,
@@ -594,7 +602,8 @@ class BoutiqueProductState extends State<BoutiqueProduct> {
                 ),
               ],
             ),
-          );
+          ),
+        );
         },
       ),
     );

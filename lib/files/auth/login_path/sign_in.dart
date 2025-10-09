@@ -555,89 +555,242 @@ class SignInState extends State<SignIn> {
   }
 
   void sendOTP() async {
-
-    String phone = '';
-
-    if(phoneController.text.startsWith('+92')){
-      phone = phoneController.text.trim();
+    String phone = phoneController.text.trim();
+    
+    // Handle different phone number formats
+    if (!phone.startsWith('+')) {
+      if (phone.startsWith('91')) {
+        phone = '+$phone';
+      } else if (phone.startsWith('92')) {
+        phone = '+$phone';
+      } else {
+        phone = '+91$phone';
+      }
     }
-    else {
-      phone = '+91${phoneController.text.trim()}';
-    }
 
+    // Validate phone number format
     if (!RegExp(r'^\+91\d{10}$|^\+92\d{10}$').hasMatch(phone)) {
-      EasyLoading.showError('Enter a valid phone number with country code (+91xxxxxxxxx)');
+      EasyLoading.showError('Enter a valid phone number');
       return;
     }
 
+    if (kDebugMode) {
+      print('Sending OTP to: $phone');
+    }
+
     EasyLoading.show(status: 'Sending OTP...');
-    await FirebaseAuth.instance.verifyPhoneNumber(
-      phoneNumber: phone,
-      verificationCompleted: (PhoneAuthCredential credential) async {
-        UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
-        theID = userCredential.user!.uid;
-        EasyLoading.showSuccess('Login successful');
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const HomePage()),
-        );
-      },
-      verificationFailed: (FirebaseAuthException e) {
-        EasyLoading.showError('Failed to send OTP: ${e.message}');
-        if (kDebugMode) {
-          print(e.message);
-        }
-      },
-      codeSent: (String verificationId, int? resendToken) {
+    
+    try {
+      // For development/testing, we can bypass Firebase Auth temporarily
+      if (kDebugMode && (phone == '+919876543210' || phone == '+911234567890')) {
+        EasyLoading.dismiss();
         setState(() {
-          this.verificationId = verificationId;
+          verificationId = 'test_verification_id';
           otpSent = true;
         });
-        EasyLoading.showSuccess('OTP sent successfully');
-      },
-      codeAutoRetrievalTimeout: (String verificationId) {},
-    );
+        EasyLoading.showSuccess('Test OTP sent (use 123456)');
+        return;
+      }
+
+      // Production note: Ensure the following are configured:
+      // 1. Firebase project has correct SHA-1/SHA-256 fingerprints
+      // 2. Phone Authentication is enabled in Firebase Console
+      // 3. App verification is properly set up for production
+
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: phone,
+        timeout: const Duration(seconds: 120),
+        forceResendingToken: null,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          try {
+            if (kDebugMode) {
+              print('Auto verification completed');
+            }
+            EasyLoading.dismiss();
+            UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+            theID = userCredential.user!.uid;
+            await _createUserDocument(userCredential.user!.uid, phone);
+            EasyLoading.showSuccess('Login successful');
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const HomePage()),
+              );
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              print('Auto verification error: $e');
+            }
+            EasyLoading.showError('Auto-verification failed');
+          }
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          EasyLoading.dismiss();
+          String errorMessage = 'Failed to send OTP';
+          
+          if (kDebugMode) {
+            print('Verification failed: ${e.code} - ${e.message}');
+          }
+          
+          switch (e.code) {
+            case 'invalid-phone-number':
+              errorMessage = 'Invalid phone number format';
+              break;
+            case 'too-many-requests':
+              errorMessage = 'Too many requests. Please try again after some time';
+              break;
+            case 'quota-exceeded':
+              errorMessage = 'SMS quota exceeded. Please contact support';
+              break;
+            case 'app-not-authorized':
+              errorMessage = 'App not authorized for SMS verification';
+              break;
+            case 'network-request-failed':
+              errorMessage = 'Network error. Please check your connection';
+              break;
+            default:
+              errorMessage = e.message ?? 'Verification failed. Please try again';
+          }
+          EasyLoading.showError(errorMessage);
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          if (kDebugMode) {
+            print('Code sent successfully. Verification ID: $verificationId');
+          }
+          EasyLoading.dismiss();
+          setState(() {
+            this.verificationId = verificationId;
+            otpSent = true;
+          });
+          EasyLoading.showSuccess('OTP sent to $phone');
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          if (kDebugMode) {
+            print('Code auto-retrieval timeout: $verificationId');
+          }
+          setState(() {
+            this.verificationId = verificationId;
+          });
+        },
+      );
+    } catch (e) {
+      EasyLoading.dismiss();
+      if (kDebugMode) {
+        print('Send OTP error: $e');
+      }
+      EasyLoading.showError('Unable to send OTP. Please check your network connection');
+    }
   }
 
   void verifyOTP() async {
     String otp = otpController.text.trim();
 
     if (otp.isEmpty || otp.length != 6) {
-      EasyLoading.showError('Enter a valid OTP');
+      EasyLoading.showError('Please enter a valid 6-digit OTP');
+      return;
+    }
+
+    // Handle test OTP
+    if (kDebugMode && verificationId == 'test_verification_id' && otp == '123456') {
+      EasyLoading.show(status: 'Verifying OTP...');
+      await Future.delayed(Duration(seconds: 1));
+      EasyLoading.dismiss();
+      EasyLoading.showSuccess('Test login successful');
+      theID = 'test_user_id';
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      }
+      return;
+    }
+
+    if (verificationId.isEmpty) {
+      EasyLoading.showError('Verification ID not found. Please resend OTP');
       return;
     }
 
     EasyLoading.show(status: 'Verifying OTP...');
+    
     try {
+      if (kDebugMode) {
+        print('Verifying OTP: $otp with verification ID: $verificationId');
+      }
+      
       PhoneAuthCredential credential = PhoneAuthProvider.credential(
         verificationId: verificationId,
         smsCode: otp,
       );
-      UserCredential userCredential =
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
       final userId = userCredential.user?.uid;
       theID = userId!;
-      final userDoc =
-      await FirebaseFirestore.instance.collection('users').doc(userId).get();
+      
+      String phone = phoneController.text.trim();
+      if (!phone.startsWith('+')) {
+        phone = '+91$phone';
+      }
+      
+      await _createUserDocument(userId, phone);
+      
+      EasyLoading.dismiss();
+      EasyLoading.showSuccess('Login successful');
+      
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      EasyLoading.dismiss();
+      String errorMessage = 'Failed to verify OTP';
+      
+      if (kDebugMode) {
+        print('OTP verification failed: ${e.code} - ${e.message}');
+      }
+      
+      switch (e.code) {
+        case 'invalid-verification-code':
+          errorMessage = 'Invalid OTP. Please check and try again';
+          break;
+        case 'session-expired':
+          errorMessage = 'OTP expired. Please resend OTP';
+          break;
+        case 'too-many-requests':
+          errorMessage = 'Too many attempts. Please try again later';
+          break;
+        default:
+          errorMessage = e.message ?? 'OTP verification failed';
+      }
+      EasyLoading.showError(errorMessage);
+    } catch (e) {
+      EasyLoading.dismiss();
+      if (kDebugMode) {
+        print('OTP verification error: $e');
+      }
+      EasyLoading.showError('Verification failed. Please try again');
+    }
+  }
 
+  Future<void> _createUserDocument(String userId, String phone) async {
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
       if (!userDoc.exists) {
         String joinDate = DateFormat('dd/MM/yyyy').format(DateTime.now());
         await FirebaseFirestore.instance.collection('users').doc(userId).set({
-          'phone': phoneController.text.trim(),
+          'phone': phone,
           'name': '',
           'joinDate': joinDate,
           'status': "0",
           'email': '',
         });
       }
-
-      EasyLoading.showSuccess('Login successful');
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomePage()),
-      );
-        } catch (e) {
-      EasyLoading.showError('Failed to verify OTP: ${e.toString()}');
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error creating user document: $e');
+      }
     }
   }
 }

@@ -7,6 +7,9 @@ import 'package:groovyn/files/user/product/reviews_page.dart';
 import 'package:flexi_productimage_slider/flexi_productimage_slider.dart';
 import 'package:groovyn/main.dart';
 import 'package:intl/intl.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
+import 'package:groovyn/widgets/premium_loading.dart';
+import 'package:groovyn/widgets/delivery_widget.dart';
 
 import '../cart/cart_page.dart';
 import '../profile/wish_list.dart';
@@ -42,9 +45,11 @@ class ProductPageState extends State<ProductPage> {
   String productDetailValue3 = 'Material not available';
   String productDescription = 'No Description Available';
   String storeID = '';
+  String businessField = 'Rental'; // Default to rental, will be updated from store data
 
   DateTime? startDate;
   DateTime? endDate;
+  final TextEditingController _pincodeController = TextEditingController();
 
   double rentPerDay = 500;
   double averageRating = 0;
@@ -55,6 +60,8 @@ class ProductPageState extends State<ProductPage> {
   int totalRatings = 0;
 
   bool isLoading = true;
+  bool isAddingToCart = false;
+  bool isBuyingNow = false;
 
   List<Map<String, dynamic>> boutiques = [];
   List<Map<String, dynamic>> productSizesAndStock = [];
@@ -71,15 +78,31 @@ class ProductPageState extends State<ProductPage> {
   }
 
   Future<void> fetchFavorites() async {
-    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(theID).get();
-    if (userDoc.exists && userDoc.data() != null) {
+    if (theID.isEmpty) {
       setState(() {
-        favoriteProductIds = List<String>.from(userDoc['favourites'] ?? []);
+        favoriteProductIds = [];
+      });
+      return;
+    }
+    
+    try {
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(theID).get();
+      if (userDoc.exists && userDoc.data() != null) {
+        setState(() {
+          favoriteProductIds = List<String>.from(userDoc['favourites'] ?? []);
+        });
+      }
+    } catch (e) {
+      print('Error fetching favorites: $e');
+      setState(() {
+        favoriteProductIds = [];
       });
     }
   }
 
   Future<void> addToFavorites(String productId) async {
+    if (theID.isEmpty) return;
+    
     DocumentReference userDoc = FirebaseFirestore.instance.collection('users').doc(theID);
 
     if (favoriteProductIds.contains(productId)) {
@@ -153,18 +176,11 @@ class ProductPageState extends State<ProductPage> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            child: ClipRRect(
+            child: CustomImageWidget(
+              imageUrl: item,
+              fit: BoxFit.cover,
               borderRadius: BorderRadius.circular(12),
-              child: Image.network(
-                item,
-                fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                },
-              ),
+              showShimmer: true,
             ),
           );
         }).toList();
@@ -182,6 +198,7 @@ class ProductPageState extends State<ProductPage> {
             setState(() {
               productStoreName = storeData['businessName'] ?? productStoreName;
               productStoreLocation = storeData['businessLocation'] ?? productStoreLocation;
+              businessField = storeData['businessField'] ?? 'Rental';
             });
           } else {
             debugPrint('Store document does not exist for ID: $storeID');
@@ -603,68 +620,107 @@ class ProductPageState extends State<ProductPage> {
                                   ),
                                 ),
                                 const SizedBox(height: 8,),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
-                                      decoration: BoxDecoration(
-                                        border: Border.all(color: Colors.black, width: 1),
-                                        borderRadius: BorderRadius.circular(5),
-                                        color: Colors.white,
-                                      ),
-                                      child: DropdownButton<int>(
-                                        value: selectedDays,
-                                        underline: const SizedBox(), // Removes the default underline
-                                        icon: const Icon(Icons.arrow_drop_down),
-                                        items: List.generate(10, (index) => index + 1)
-                                            .map((day) => DropdownMenuItem<int>(
-                                          value: day,
-                                          child: Text(
-                                            '$day',
-                                            style: const TextStyle(fontSize: 16),
-                                          ),
-                                        )).toList(),
-                                        onChanged: (value) {
-                                          setState(() {
-                                            selectedDays = value!;
-                                          });
-                                        },
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    const Text(
-                                      'Days',
-                                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                    ),
-                                    const SizedBox(width: 16),
-
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black,
-                                        borderRadius: BorderRadius.circular(5),
-                                      ),
-                                      child: Text(
-                                        '₹ ${selectedDays * rentPerDay}',
-                                        style: const TextStyle(
+                                if (businessField == 'Rental') ...[
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.black, width: 1),
+                                          borderRadius: BorderRadius.circular(5),
                                           color: Colors.white,
-                                          fontSize: 16,
+                                        ),
+                                        child: DropdownButton<int>(
+                                          value: selectedDays,
+                                          underline: const SizedBox(), // Removes the default underline
+                                          icon: const Icon(Icons.arrow_drop_down),
+                                          items: List.generate(10, (index) => index + 1)
+                                              .map((day) => DropdownMenuItem<int>(
+                                            value: day,
+                                            child: Text(
+                                              '$day',
+                                              style: const TextStyle(fontSize: 16),
+                                            ),
+                                          )).toList(),
+                                          onChanged: (value) {
+                                            setState(() {
+                                              selectedDays = value!;
+                                            });
+                                          },
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        'Days',
+                                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                      ),
+                                      const SizedBox(width: 16),
+
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black,
+                                          borderRadius: BorderRadius.circular(5),
+                                        ),
+                                        child: Text(
+                                          '₹ ${selectedDays * rentPerDay}',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8,),
+                                  Text(
+                                    'Rental for $selectedDays ${selectedDays == 1 ? 'day' : 'days'} - Get delivered by ${formatDate(DateTime.now().add(Duration(days: 3)))}',
+                                    style: GoogleFonts.poppins(
+                                      textStyle: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w400
+                                      )
+                                    ),
+                                  ),
+                                ] else ...[
+                                  // For boutique products, show simple pricing
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      '₹ ${rentPerDay.toInt()}',
+                                      style: GoogleFonts.montserrat(
+                                        textStyle: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 18,
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8,),
-                                Text(
-                                  'Get delivered by ${formatDate(DateTime.now().add(Duration(days: 3)))}',
-                                  style: GoogleFonts.poppins(
-                                    textStyle: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w400
-                                    )
                                   ),
+                                  const SizedBox(height: 8,),
+                                  Text(
+                                    'Get delivered by ${formatDate(DateTime.now().add(Duration(days: 3)))}',
+                                    style: GoogleFonts.poppins(
+                                      textStyle: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w400
+                                      )
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 16,),
+                                // Delivery/Pincode Widget
+                                DeliveryEstimationWidget(
+                                  pincodeController: _pincodeController,
+                                  onPincodeChanged: (pincode) {
+                                    // Handle pincode change if needed
+                                  },
                                 ),
                                 const SizedBox(height: 16,),
                                 Text.rich(
@@ -726,78 +782,80 @@ class ProductPageState extends State<ProductPage> {
                                 ),
                                 const SizedBox(height: 20,),
 
-                                Text(
-                                  'Dates',
-                                  style: GoogleFonts.poppins(
-                                    textStyle: TextStyle(
-                                      color: Colors.black,
-                                      fontSize: 14,
-                                      fontFamily: 'Poppins',
-                                      fontWeight: FontWeight.w600,
+                                // Only show dates section for rental products
+                                if (businessField == 'Rental') ...[
+                                  Text(
+                                    'Dates',
+                                    style: GoogleFonts.poppins(
+                                      textStyle: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 14,
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.w600,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                GestureDetector(
-                                  onTap: () async {
-                                    DateTime now = DateTime.now();
-                                    DateTime? pickedDate = await showDatePicker(
-                                      context: context,
-                                      initialDate: now,
-                                      firstDate: now,
-                                      lastDate: DateTime(now.year + 1),
-                                      builder: (BuildContext context, Widget? child) {
-                                        return Theme(
-                                          data: ThemeData.dark().copyWith(
-                                            colorScheme: ColorScheme.dark(
-                                              primary: Colors.black,
-                                              onPrimary: Colors.white,
-                                              surface: Colors.white,
-                                              onSurface: Colors.black,
+                                  const SizedBox(height: 8),
+                                  GestureDetector(
+                                    onTap: () async {
+                                      DateTime now = DateTime.now();
+                                      DateTime? pickedDate = await showDatePicker(
+                                        context: context,
+                                        initialDate: now,
+                                        firstDate: now,
+                                        lastDate: DateTime(now.year + 1),
+                                        builder: (BuildContext context, Widget? child) {
+                                          return Theme(
+                                            data: ThemeData.dark().copyWith(
+                                              colorScheme: ColorScheme.dark(
+                                                primary: Colors.black,
+                                                onPrimary: Colors.white,
+                                                surface: Colors.white,
+                                                onSurface: Colors.black,
+                                              ),
+                                              dialogBackgroundColor: Colors.white,
                                             ),
-                                            dialogBackgroundColor: Colors.white,
-                                          ),
-                                          child: child!,
-                                        );
-                                      },
-                                    );
+                                            child: child!,
+                                          );
+                                        },
+                                      );
 
-                                    if (pickedDate != null) {
-                                      setState(() {
-                                        startDate = pickedDate;
-                                        endDate = pickedDate.add(
-                                          Duration(days: selectedDays - 1),
-                                        );
-                                      });
-                                    }
-                                  },
+                                      if (pickedDate != null) {
+                                        setState(() {
+                                          startDate = pickedDate;
+                                          endDate = pickedDate.add(
+                                            Duration(days: selectedDays - 1),
+                                          );
+                                        });
+                                      }
+                                    },
 
-                                  child: Container(
-                                    padding:
-                                    const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(color: Colors.black, width: 1),
-                                      borderRadius: BorderRadius.circular(5),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          startDate == null || endDate == null
-                                              ? 'Select Date Range'
-                                              : '${DateFormat('d MMM yyyy').format(startDate!)} - ${DateFormat('d MMM yyyy').format(endDate!)}',
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            color: Colors.black,
+                                    child: Container(
+                                      padding:
+                                      const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: Colors.black, width: 1),
+                                        borderRadius: BorderRadius.circular(5),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            startDate == null || endDate == null
+                                                ? 'Select Date Range'
+                                                : '${DateFormat('d MMM yyyy').format(startDate!)} - ${DateFormat('d MMM yyyy').format(endDate!)}',
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              color: Colors.black,
+                                            ),
                                           ),
-                                        ),
-                                        const Icon(Icons.calendar_today_outlined),
-                                      ],
+                                          const Icon(Icons.calendar_today_outlined),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                ),
-
-                                const SizedBox(height: 20,),
+                                  const SizedBox(height: 20,),
+                                ],
 
                                 Row(
                                   children: [
@@ -1251,140 +1309,110 @@ class ProductPageState extends State<ProductPage> {
           ),
         ),
       ),
-      bottomNavigationBar: SizedBox(
-        height: 60,
-        child: Column(
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: const Color.fromRGBO(0, 0, 0, 0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: ()async {
+            Expanded(
+              child: PremiumButton(
+                text: 'Add to Cart',
+                icon: Icons.shopping_cart_outlined,
+                isLoading: isAddingToCart,
+                backgroundColor: Colors.white,
+                textColor: Colors.black,
+                onPressed: () async {
+                  if(theID.isEmpty){
+                    handleLogin();
+                    return;
+                  }
 
-                      // if(selectedSize.isEmpty){
-                      //   EasyLoading.showError('No size selected. Select a size first !');
-                      //   return;
-                      // }
-                      if(theID.isEmpty){
-                        handleLogin();
-                        return;
-                      }
+                  setState(() {
+                    isAddingToCart = true;
+                  });
 
-                      EasyLoading.show(status: 'Adding to Bag..');
+                  await Future.delayed(Duration(milliseconds: 500));
 
-                      if(!cartProductIDs.contains(widget.productID)) {
+                  if(!cartProductIDs.contains(widget.productID)) {
+                    cartProductIDs.add(widget.productID);
+                    cartProductNames.add(productName);
+                    cartProductImages.add(pictures[0]);
+                    cartProductPrices.add(businessField == 'Rental' ? (rentPerDay*selectedDays).toString() : rentPerDay.toString());
+                    cartProductSizes.add(selectedSize.toString());
+                    cartProductColors.add(selectedColor.toString());
+                    cartProductTags.add(productTags);
+                    cartProductQuantity.add(1);
+                  } else {
+                    cartProductQuantity[cartProductIDs.indexOf(widget.productID)]++;
+                  }
 
-                        cartProductIDs.add(widget.productID);
-                        cartProductNames.add(productName);
-                        cartProductImages.add(pictures[0]);
-                        cartProductPrices.add((rentPerDay*selectedDays).toString());
-                        cartProductSizes.add(selectedSize.toString());
-                        cartProductColors.add(selectedColor.toString());
-                        cartProductTags.add(productTags);
-                        cartProductQuantity.add(1);
+                  setState(() {
+                    isAddingToCart = false;
+                  });
 
-                      }
-                      else{
-                        cartProductQuantity[cartProductIDs.indexOf(widget.productID)]++;
-                      }
+                  EasyLoading.showSuccess('Added to cart!');
+                },
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: PremiumButton(
+                text: 'Buy Now',
+                icon: Icons.flash_on,
+                isLoading: isBuyingNow,
+                backgroundColor: Colors.black,
+                textColor: Colors.white,
+                onPressed: () async {
+                  if(theID.isEmpty){
+                    handleLogin();
+                    return;
+                  }
 
-                      await Future.delayed(Duration(seconds: 1));
+                  if(selectedSize.isEmpty){
+                    EasyLoading.showError('Please select a size first!');
+                    return;
+                  }
 
-                      EasyLoading.showSuccess('Product Added to Bag Successfully!');
+                  if(selectedColor.isEmpty){
+                    EasyLoading.showError('Please select a color first!');
+                    return;
+                  }
 
-                    },
-                    child: Container(
-                      height: 60,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Color(0x3F000000),
-                            blurRadius: 4,
-                            offset: Offset(0, 4),
-                            spreadRadius: 0,
-                          )
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Add to bag',
-                          style: GoogleFonts.poppins(
-                            textStyle: TextStyle(
-                              color: Colors.black,
-                              fontSize: 15,
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () async {
+                  setState(() {
+                    isBuyingNow = true;
+                  });
 
-                      if(theID.isEmpty){
-                        handleLogin();
-                        return;
-                      }
+                  await Future.delayed(Duration(milliseconds: 500));
 
-                      if(selectedSize.isEmpty){
-                        EasyLoading.showError('No size selected. Select a size first !');
-                        return;
-                      }
+                  if(!cartProductIDs.contains(widget.productID)) {
+                    cartProductIDs.add(widget.productID);
+                    cartProductNames.add(productName);
+                    cartProductImages.add(pictures[0]);
+                    cartProductPrices.add(businessField == 'Rental' ? (rentPerDay*selectedDays).toString() : rentPerDay.toString());
+                    cartProductSizes.add(selectedSize.toString());
+                    cartProductColors.add(selectedColor.toString());
+                    cartProductTags.add(productTags);
+                    cartProductQuantity.add(1);
+                  } else {
+                    cartProductQuantity[cartProductIDs.indexOf(widget.productID)]++;
+                  }
 
-                      if(selectedColor.isEmpty){
-                        EasyLoading.showError('No color selected. Select a color first !');
-                        return;
-                      }
+                  setState(() {
+                    isBuyingNow = false;
+                  });
 
-                      EasyLoading.show(status: 'Adding to Bag..');
-
-                      if(!cartProductIDs.contains(widget.productID)) {
-
-                        cartProductIDs.add(widget.productID);
-                        cartProductNames.add(productName);
-                        cartProductImages.add(pictures[0]);
-                        cartProductPrices.add((rentPerDay*selectedDays).toString());
-                        cartProductSizes.add(selectedSize.toString());
-                        cartProductColors.add(selectedColor.toString());
-                        cartProductTags.add(productTags);
-                        cartProductQuantity.add(1);
-
-                      }
-                      else{
-                        cartProductQuantity[cartProductIDs.indexOf(widget.productID)]++;
-                      }
-
-                      await Future.delayed(Duration(seconds: 1));
-
-                      EasyLoading.showSuccess('Product Added to Bag Successfully!');
-                      Navigator.push(context, MaterialPageRoute(builder: (context)=> const CartPage()));
-                    },
-                    child: Container(
-                      width: 195,
-                      height: 60,
-                      decoration: BoxDecoration(color: Colors.black),
-                      child: Center(
-                        child: Text(
-                          'Buy Now',
-                          style: GoogleFonts.poppins(
-                            textStyle: TextStyle(
-                              color: Colors.white,
-                              fontSize: 15,
-                              fontFamily: 'Poppins',
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+                  Navigator.push(context, MaterialPageRoute(builder: (context)=> const CartPage()));
+                },
+              ),
             ),
           ],
         ),
@@ -1518,5 +1546,11 @@ class ProductPageState extends State<ProductPage> {
     }
 
     return '$dayOfWeek, $day$suffix $month';
+  }
+
+  @override
+  void dispose() {
+    _pincodeController.dispose();
+    super.dispose();
   }
 }

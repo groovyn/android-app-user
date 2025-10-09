@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:groovyn/files/auth/login_path/intro_page.dart';
+import 'package:groovyn/files/auth/login_path/sign_in.dart';
 import 'package:groovyn/files/user/mains/main_landing.dart';
 
 import '../../../main.dart';
@@ -36,7 +36,7 @@ class SplashScreenState extends State<SplashScreen> with SingleTickerProviderSta
 
     _controller = AnimationController(
       vsync: this,
-      duration: Duration(seconds: 2),
+      duration: Duration(milliseconds: 800),
     );
 
     _animation = Tween<double>(begin: 0, end: 2 * 3.14159).animate(
@@ -51,7 +51,7 @@ class SplashScreenState extends State<SplashScreen> with SingleTickerProviderSta
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         Navigator.of(context).pushReplacement(
-          PageRouteBuilder(pageBuilder: (context, animation, secondaryAnimation) => isAuthenticated ? HomePage() : IntroPage(),
+          PageRouteBuilder(pageBuilder: (context, animation, secondaryAnimation) => isAuthenticated ? HomePage() : SignIn(),
             transitionDuration: Duration.zero,
             reverseTransitionDuration: Duration.zero,
           )

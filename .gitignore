@@ -1,3 +1,89 @@
 # Project exclude paths
 /.dart_tool/
 /build/
+
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Node modules
+node_modules/
+package-lock.json
+
+# Scripts and scrapers
+*.js
+!android/**/*.js
+*.json
+!pubspec.json
+!pubspec.lock
+!android/**/*.json
+
+# Images and media
+*.jpeg
+*.jpg
+*.png
+!assets/**/*.png
+!assets/**/*.jpg
+!assets/**/*.jpeg
+downloaded_images/
+
+# Documentation and guides
+*.md
+!README.md
+
+# Logs
+*.log
+
+# Service account keys (IMPORTANT - never commit!)
+service-account-key.json
+**/service-account-key.json
+
+# Test
+test/
+
+# Web
+web/
+
+# Claude AI
+.claude/

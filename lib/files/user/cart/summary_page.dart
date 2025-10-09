@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/main.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 
 import '../../payment_service.dart';
 import '../mains/main_landing.dart';
@@ -342,13 +343,12 @@ class SummaryPageState extends State<SummaryPage> {
                                           child: Column(
                                             children: [
                                               Expanded(
-                                                child: Container(
-                                                  decoration: ShapeDecoration(
-                                                    image: DecorationImage(
-                                                      image: NetworkImage(cartProductImages[index]),
-                                                      fit: BoxFit.fill,
-                                                    ),
-                                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+                                                child: ClipRRect(
+                                                  borderRadius: BorderRadius.circular(5),
+                                                  child: CustomImageWidget(
+                                                    imageUrl: cartProductImages[index],
+                                                    fit: BoxFit.fill,
+                                                    borderRadius: BorderRadius.circular(5),
                                                   ),
                                                 ),
                                               ),

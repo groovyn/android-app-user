@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/user/tailors/tailors_product.dart';
 
 import 'package:groovyn/main.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 
 import '../mains/main_landing.dart';
 
@@ -171,7 +172,7 @@ class TailorsListingState extends State<TailorsListing> {
           const Spacer(),
           if (!isSearchActive)
             Text(
-              'Boutiques',
+              'Tailors',
               style: GoogleFonts.montserrat(
                 textStyle: const TextStyle(
                   color: Colors.black,
@@ -220,7 +221,7 @@ class TailorsListingState extends State<TailorsListing> {
     return Align(
       alignment: Alignment.centerLeft,
       child: Text(
-        'Trending Boutiques',
+        'Trending Tailors',
         style: GoogleFonts.montserrat(
           textStyle: const TextStyle(
             color: Colors.black,
@@ -296,18 +297,47 @@ class TailorsListingState extends State<TailorsListing> {
               flex: 2,
               child: SizedBox(
                 height: 124,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.network(
-                    rental['businessImages'][0],
-                    fit: BoxFit.cover,
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const Center(
-                        child: CircularProgressIndicator(),
-                      );
-                    },
-                  ),
+                child: Stack(
+                  children: [
+                    CustomImageWidget(
+                      imageUrl: rental['businessImages'][0],
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    // Rating overlay - bottom right
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: const Color.fromRGBO(0, 0, 0, 0.7),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.star,
+                              color: Colors.green,
+                              size: 12,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              '4.5', // Default rating for tailors
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -342,7 +372,7 @@ class TailorsListingState extends State<TailorsListing> {
                         Image.asset('assets/svgs/img_15.png', width: 10, height: 13,),
                         const SizedBox(width: 6,),
                         Text(
-                          rental['businessLocation'] ?? '',
+                          '${rental['businessLocation'] ?? 'Location not available'} • 2.5 km',
                           style: GoogleFonts.poppins(
                             textStyle: const TextStyle(
                               color: Colors.black,

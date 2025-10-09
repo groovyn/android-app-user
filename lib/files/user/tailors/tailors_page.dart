@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/main.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:groovyn/widgets/fashion_refresh_header.dart';
 
 import '../cart/cart_page.dart';
 import '../mains/listing_page.dart';
@@ -158,26 +160,7 @@ class TailorsPageState extends State<TailorsPage> {
               controller: _refreshController,
               enablePullDown: true,
               onRefresh: _handleRefresh,
-              header: CustomHeader(
-                builder: (context, mode) {
-                  return Center(
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 90.0),
-                          child: Center(
-                            child: Image.asset(
-                              'assets/images/loading.gif',
-                              height: 100,
-                              width: 100,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+              header: FashionRefreshHeader(customText: "Pull for tailor updates"),
               child: ListView(
                 children: [
                   Padding(
@@ -201,18 +184,27 @@ class TailorsPageState extends State<TailorsPage> {
                       ),
                       child: Row(
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Image.asset(
-                              'assets/icons/img_8.png',
-                              width: 40,
-                              height: 40,
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(builder: (context) => const HomePage()),
+                                (route) => false,
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child: Image.asset(
+                                'assets/icons/img_8.png',
+                                width: 40,
+                                height: 40,
+                              ),
                             ),
                           ),
                           Expanded(
                             child: GestureDetector(
                               onTap: (){
-                                Navigator.push(context, MaterialPageRoute(builder: (context)=> ListingPage(isSearch: true,)));
+                                Navigator.push(context, MaterialPageRoute(builder: (context)=> ListingPage(isSearch: true, categoryType: 'tailor',)));
                               },
                               child: Center(
                                 child: TextField(
@@ -220,7 +212,7 @@ class TailorsPageState extends State<TailorsPage> {
                                   decoration: InputDecoration(
                                     border: InputBorder.none,
                                     contentPadding: EdgeInsets.only(top: 8, bottom: 12, left: 8),
-                                    hintText: 'Search',
+                                    hintText: 'Search tailors, services...',
                                     enabled: false,
                                     hintStyle: GoogleFonts.montserrat(
                                       textStyle: GoogleFonts.poppins(
@@ -329,7 +321,7 @@ class TailorsPageState extends State<TailorsPage> {
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.2), // Shadow color with transparency
+                                  color: const Color.fromRGBO(0, 0, 0, 0.2), // Shadow color with transparency
                                   offset: Offset(-4, 4), // Left (-4) and bottom (4) shadow
                                   blurRadius: 10, // Softness of the shadow
                                   spreadRadius: 2, // How much the shadow spreads
@@ -369,17 +361,31 @@ class TailorsPageState extends State<TailorsPage> {
                             padding: const EdgeInsets.only(left: 20.0, right: 20.0),
                             child: Align(
                               alignment: Alignment.centerLeft,
-                              child: Text(
-                                'Latest Designs',
-                                style: GoogleFonts.poppins(
-                                  textStyle: TextStyle(
-                                    color: Colors.black,
-                                    fontSize: 20,
-                                    fontFamily: 'Poppins',
-                                    fontWeight: FontWeight.w700,
-                                    height: 0.03,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Tailors',
+                                    style: GoogleFonts.poppins(
+                                      textStyle: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 20,
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.w700,
+                                        height: 0.03,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Trending tailors near you',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 12,
+                                      color: Colors.grey.shade600,
+                                      fontWeight: FontWeight.w400,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -401,7 +407,7 @@ class TailorsPageState extends State<TailorsPage> {
                                         decoration: ShapeDecoration(
                                           color: Colors.white,
                                           shape: RoundedRectangleBorder(
-                                            side: BorderSide(color: Colors.black.withOpacity(0.1)),
+                                            side: const BorderSide(color: Color.fromRGBO(0, 0, 0, 0.1)),
                                             borderRadius: BorderRadius.circular(20),
                                           ),
                                           shadows: [
@@ -447,20 +453,12 @@ class TailorsPageState extends State<TailorsPage> {
                                                       flex: 3,
                                                       child: SizedBox(
                                                         width: MediaQuery.of(context).size.width,
-                                                        child: ClipRRect(
+                                                        child: CustomImageWidget(
+                                                          imageUrl: tailor['businessImages'][0],
+                                                          fit: BoxFit.fill,
                                                           borderRadius: const BorderRadius.only(
                                                             topLeft: Radius.circular(10),
                                                             topRight: Radius.circular(10),
-                                                          ),
-                                                          child: Image.network(
-                                                            tailor['businessImages'][0],
-                                                            fit: BoxFit.fill,
-                                                            loadingBuilder: (context, child, loadingProgress) {
-                                                              if (loadingProgress == null) return child;
-                                                              return const Center(
-                                                                child: CircularProgressIndicator(),
-                                                              );
-                                                            },
                                                           ),
                                                         ),
                                                       ),
@@ -558,21 +556,50 @@ class TailorsPageState extends State<TailorsPage> {
                                                     topRight: Radius.circular(10),
                                                   ),
                                                 ),
-                                                child: ClipRRect(
-                                                  borderRadius: BorderRadius.only(
-                                                    topLeft: Radius.circular(10),
-                                                    topRight: Radius.circular(10),
-                                                  ),
-                                                  child: Image.network(
-                                                    rental['businessImages'][0],
-                                                    fit: BoxFit.fill,
-                                                    loadingBuilder: (context, child, loadingProgress) {
-                                                      if (loadingProgress == null) return child;
-                                                      return Center(
-                                                        child: CircularProgressIndicator(),
-                                                      );
-                                                    },
-                                                  ),
+                                                child: Stack(
+                                                  children: [
+                                                    CustomImageWidget(
+                                                      imageUrl: rental['businessImages'][0],
+                                                      fit: BoxFit.fill,
+                                                      width: double.infinity,
+                                                      height: double.infinity,
+                                                      borderRadius: const BorderRadius.only(
+                                                        topLeft: Radius.circular(10),
+                                                        topRight: Radius.circular(10),
+                                                      ),
+                                                    ),
+                                                    // Rating overlay - bottom right
+                                                    Positioned(
+                                                      bottom: 8,
+                                                      right: 8,
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color.fromRGBO(0, 0, 0, 0.7),
+                                                          borderRadius: BorderRadius.circular(12),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            Icon(
+                                                              Icons.star,
+                                                              color: Colors.green,
+                                                              size: 12,
+                                                            ),
+                                                            const SizedBox(width: 2),
+                                                            Text(
+                                                              '4.5', // Default rating for tailors
+                                                              style: GoogleFonts.poppins(
+                                                                color: Colors.white,
+                                                                fontSize: 11,
+                                                                fontWeight: FontWeight.w600,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                             ),
@@ -608,11 +635,11 @@ class TailorsPageState extends State<TailorsPage> {
                                                       mainAxisAlignment: MainAxisAlignment.start,
                                                       children: [
                                                         Text(
-                                                          '${rental['businessLocation'] ?? '0'}',
+                                                          '${rental['businessLocation'] ?? 'Location not available'} • 2.5 km',
                                                           style: GoogleFonts.poppins(
                                                               textStyle: TextStyle(
                                                                 color: Colors.black,
-                                                                fontSize: 18,
+                                                                fontSize: 16,
                                                                 fontFamily: 'Manrope',
                                                                 fontWeight: FontWeight.w400,
                                                               )
@@ -624,7 +651,7 @@ class TailorsPageState extends State<TailorsPage> {
                                                             children: [
                                                               Icon(
                                                                 Icons.star,
-                                                                color: Colors.yellow,
+                                                                color: Colors.green,
                                                               ),
                                                               const SizedBox(width: 8,),
                                                               Text(

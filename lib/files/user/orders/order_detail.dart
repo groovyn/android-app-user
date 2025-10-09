@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 
 class OrderDetail extends StatefulWidget {
   final String orderId;
@@ -94,11 +95,12 @@ class _OrderDetailState extends State<OrderDetail> {
                               children: [
                                 Row(
                                   children: [
-                                    Image.network(
-                                      orderData['images'][index],
+                                    CustomImageWidget(
+                                      imageUrl: orderData['images'][index],
                                       width: 80,
                                       height: 80,
                                       fit: BoxFit.cover,
+                                      borderRadius: BorderRadius.circular(8),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(

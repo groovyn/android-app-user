@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/user/product/write_review.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 
 import '../mains/main_landing.dart';
 
@@ -110,19 +111,14 @@ class ReviewsPageState extends State<ReviewsPage> {
             child: Row(
               children: [
                 for (int i = 0; i < (review['imageLinks'] as List).length; i++)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      review['imageLinks'][i],
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: CustomImageWidget(
+                      imageUrl: review['imageLinks'][i],
                       fit: BoxFit.cover,
                       width: 66,
                       height: 66,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const Center(
-                          child: CircularProgressIndicator(),
-                        );
-                      },
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
               ],

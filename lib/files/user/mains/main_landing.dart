@@ -1,10 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_card_swiper/flutter_card_swiper.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/user/boutique/boutique_page.dart';
+import 'package:groovyn/files/user/boutique/boutique_listing.dart';
 import 'package:groovyn/files/user/fabrics/fabrics_page.dart';
 import 'package:groovyn/files/user/mains/listing_page.dart';
 import 'package:groovyn/files/user/profile/profile_page.dart';
@@ -12,11 +13,13 @@ import 'package:groovyn/files/user/product/product_page.dart';
 import 'package:groovyn/files/user/mains/rental_page.dart';
 import 'package:groovyn/files/user/profile/wish_list.dart';
 import 'package:groovyn/files/user/tailors/tailors_listing.dart';
-import 'package:groovyn/files/user/tailors/tailors_page.dart';
 import 'package:groovyn/main.dart';
+import 'package:groovyn/widgets/fashion_refresh_header.dart';
+import 'package:groovyn/widgets/rental_product_card.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
+import 'package:groovyn/theme/app_theme.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
 
-import '../boutique/boutique_product.dart';
 import '../cart/cart_page.dart';
 
 class HomePage extends StatefulWidget{
@@ -34,6 +37,7 @@ class HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> tailors = [];
   List<DocumentSnapshot> reviews = [];
   List<Map<String, dynamic>> boutiques = [];
+  List<Map<String, dynamic>> trendingProducts = [];
 
   List<String> _advertisements = [];
 
@@ -47,6 +51,7 @@ class HomePageState extends State<HomePage> {
     fetchFavorites();
     fetchTailors();
     fetchBoutiques();
+    fetchTrendingProducts();
     fetchRentals();
   }
 
@@ -62,19 +67,67 @@ class HomePageState extends State<HomePage> {
         .where('status', isEqualTo: true)
         .where('trending', isEqualTo: true)
         .get();
-    List<Map<String, dynamic>> fetchedRentals = [];
+    
+    if (querySnapshot.docs.isEmpty) {
+      setState(() { rentals = []; });
+      return;
+    }
 
+    List<Map<String, dynamic>> fetchedRentals = [];
+    
+    // Get all unique store IDs to batch fetch stores
+    Set<String> storeIds = {};
     for (var doc in querySnapshot.docs) {
       var productData = doc.data() as Map<String, dynamic>;
-      productData['documentID'] = doc.id;
-      Map<String, String> map = await fetchReviews(doc.id);
-      productData['total'] =  map['total'];
-      productData['rating'] =  map['rating'];
-      DocumentSnapshot storeDoc = await FirebaseFirestore.instance.collection('stores').doc(productData['productStoreID']).get();
-      if (storeDoc.exists && storeDoc['businessField'] == 'Rental') {
-        fetchedRentals.add(productData);
+      if (productData['productStoreID'] != null) {
+        storeIds.add(productData['productStoreID']);
       }
     }
+    
+    // Batch fetch all store documents
+    Map<String, Map<String, dynamic>> storeData = {};
+    if (storeIds.isNotEmpty) {
+      for (String storeId in storeIds) {
+        try {
+          DocumentSnapshot storeDoc = await FirebaseFirestore.instance
+              .collection('stores').doc(storeId).get();
+          if (storeDoc.exists) {
+            storeData[storeId] = storeDoc.data() as Map<String, dynamic>;
+          }
+        } catch (e) {
+          print('Error fetching store $storeId: $e');
+        }
+      }
+    }
+
+    // Process products with store data
+    List<Future<Map<String, dynamic>?>> futures = querySnapshot.docs.map((doc) async {
+      try {
+        var productData = doc.data() as Map<String, dynamic>;
+        productData['documentID'] = doc.id;
+        
+        // Check if store is rental business
+        String? storeId = productData['productStoreID'];
+        if (storeId != null && storeData.containsKey(storeId)) {
+          if (storeData[storeId]!['businessField'] == 'Rental') {
+            // Set default rating to avoid slow review fetching
+            productData['total'] = '150';
+            productData['rating'] = '4.2';
+            return productData;
+          }
+        }
+        return null;
+      } catch (e) {
+        print('Error processing product ${doc.id}: $e');
+        return null;
+      }
+    }).toList();
+    
+    // Wait for all products to be processed
+    List<Map<String, dynamic>?> results = await Future.wait(futures);
+    
+    // Filter out null results
+    fetchedRentals = results.where((item) => item != null).cast<Map<String, dynamic>>().toList();
 
     setState(() {
       rentals = fetchedRentals;
@@ -102,6 +155,91 @@ class HomePageState extends State<HomePage> {
     });
   }
 
+  Future<void> fetchTrendingProducts() async {
+    if (kDebugMode) {
+      print('Fetching trending products...');
+    }
+    
+    QuerySnapshot querySnapshot = await FirebaseFirestore.instance
+        .collection('products')
+        .where('trending', isEqualTo: true)
+        .where('status', isEqualTo: true)
+        .limit(20)
+        .get();
+
+    if (querySnapshot.docs.isEmpty) {
+      if (kDebugMode) {
+        print('No trending products found');
+      }
+      setState(() { trendingProducts = []; });
+      return;
+    }
+
+    if (kDebugMode) {
+      print('Found ${querySnapshot.docs.length} trending products');
+    }
+
+    List<Map<String, dynamic>> fetchedProducts = [];
+    
+    // Get all unique store IDs - try both field names
+    Set<String> storeIds = {};
+    for (var doc in querySnapshot.docs) {
+      var productData = doc.data() as Map<String, dynamic>;
+      String? storeId = productData['productStoreID'] ?? productData['storeID'];
+      if (storeId != null) {
+        storeIds.add(storeId);
+      }
+    }
+    
+    if (kDebugMode) {
+      print('Found ${storeIds.length} unique stores');
+    }
+    
+    // Batch fetch store data
+    Map<String, String> storeBusinessFields = {};
+    if (storeIds.isNotEmpty) {
+      List<Future<void>> storeQueries = storeIds.map((storeId) async {
+        try {
+          DocumentSnapshot storeDoc = await FirebaseFirestore.instance
+              .collection('stores').doc(storeId).get();
+          if (storeDoc.exists) {
+            var storeData = storeDoc.data() as Map<String, dynamic>;
+            String businessField = storeData['businessField'] ?? '';
+            storeBusinessFields[storeId] = businessField;
+            if (kDebugMode) {
+              print('Store $storeId: $businessField');
+            }
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('Error fetching store $storeId: $e');
+          }
+        }
+      }).toList();
+      
+      await Future.wait(storeQueries);
+    }
+
+    // Process products with cached store data
+    for (var doc in querySnapshot.docs) {
+      var productData = doc.data() as Map<String, dynamic>;
+      productData['documentID'] = doc.id;
+      
+      String? storeId = productData['productStoreID'] ?? productData['storeID'];
+      if (storeId != null && storeBusinessFields[storeId] == 'Boutique') {
+        fetchedProducts.add(productData);
+      }
+    }
+
+    if (kDebugMode) {
+      print('Filtered ${fetchedProducts.length} boutique products');
+    }
+
+    setState(() {
+      trendingProducts = fetchedProducts;
+    });
+  }
+
   Future<void> fetchTailors() async {
     QuerySnapshot querySnapshot = await FirebaseFirestore.instance
         .collection('stores')
@@ -124,6 +262,10 @@ class HomePageState extends State<HomePage> {
   }
 
   Future<void> fetchFavorites() async {
+    if (theID.isEmpty) {
+      return; // Skip if user is not logged in
+    }
+    
     DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(theID).get();
     if (userDoc.exists && userDoc.data() != null) {
       Map<String, dynamic> data = userDoc.data() as Map<String, dynamic>;
@@ -195,26 +337,7 @@ class HomePageState extends State<HomePage> {
               controller: _refreshController,
               enablePullDown: true,
               onRefresh: _handleRefresh,
-              header: CustomHeader(
-                builder: (context, mode) {
-                  return Center(
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 90.0),
-                          child: Center(
-                            child: Image.asset(
-                              'assets/images/loading.gif',
-                              height: 100,
-                              width: 100,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+              header: FashionRefreshHeader(customText: "Pull for fresh collections"),
               child: ListView(
                 children: [
                   Padding(
@@ -266,7 +389,7 @@ class HomePageState extends State<HomePage> {
                                   decoration: InputDecoration(
                                     border: InputBorder.none,
                                     contentPadding: EdgeInsets.only(top: 8, bottom: 12, left: 8),
-                                    hintText: 'Search',
+                                    hintText: 'Search for fashion, rentals, tailors...',
                                     enabled: false,
                                     hintStyle: GoogleFonts.montserrat(
                                       textStyle: GoogleFonts.poppins(
@@ -363,64 +486,66 @@ class HomePageState extends State<HomePage> {
                       ),
                     ),
                   ),
-                  if (!isLoading)
-                    Column(
-                      children: [
-                        SingleChildScrollView(
-                          child: Column(
-                            children: [
-                              SizedBox(
-                                height: 300,
-                                width: MediaQuery.of(context).size.width,
-                                child: ListView.builder(
-                                  shrinkWrap: true,
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: _advertisements.length,
-                                  itemBuilder:  (context, index) {
-                                    return Padding(
-                                      padding: const EdgeInsets.only(left: 12.0),
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(12),
-                                        child: Image.network(
-                                          _advertisements[index],
-                                          fit: BoxFit.cover,
-                                          loadingBuilder: (BuildContext context, Widget child, ImageChunkEvent? loadingProgress) {
-                                            if (loadingProgress == null) {
-                                              return child;
-                                            } else {
-                                              return Center(
-                                                child: Image.asset(
-                                                  'assets/images/image.gif',
-                                                  fit: BoxFit.fitWidth,
-                                                  width: 120,
-                                                  height: 100,
-                                                ),
-                                              );
-                                            }
-                                          },
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
+                  // Advertisement Section - Always visible
+                  Column(
+                    children: [
+                      SingleChildScrollView(
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              height: 300,
+                              width: MediaQuery.of(context).size.width,
+                              child: _advertisements.isEmpty
+                                  ? ListView.builder(
+                                      shrinkWrap: true,
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount: 3, // Show 3 shimmer placeholders
+                                      itemBuilder: (context, index) {
+                                        return Padding(
+                                          padding: const EdgeInsets.only(left: 12.0),
+                                          child: Container(
+                                            width: MediaQuery.of(context).size.width * 0.85,
+                                            decoration: BoxDecoration(
+                                              color: Colors.grey[300],
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                            child: Center(
+                                              child: CircularProgressIndicator(
+                                                color: Colors.black,
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    )
+                                  : ListView.builder(
+                                      shrinkWrap: true,
+                                      scrollDirection: Axis.horizontal,
+                                      itemCount: _advertisements.length,
+                                      itemBuilder: (context, index) {
+                                        return Padding(
+                                          padding: const EdgeInsets.only(left: 12.0),
+                                          child: CustomImageWidget(
+                                            imageUrl: _advertisements[index],
+                                            width: MediaQuery.of(context).size.width * 0.85,
+                                            fit: BoxFit.cover,
+                                            borderRadius: BorderRadius.circular(12),
+                                            showShimmer: true,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                            ),
                               Padding(
                                 padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 0.0),
                                 child: Column(
                                   children: [
-                                    SizedBox(height: height * 0.02,),
+                                    SizedBox(height: height * 0.03,),
                                     Align(
                                       alignment: Alignment.centerLeft,
                                       child: Text(
                                         'Category',
-                                        style: GoogleFonts.montserrat(
-                                          textStyle: TextStyle(
-                                            color: Colors.black,
-                                            fontSize: 20,
-                                            fontFamily: 'Manrope',
-                                            fontWeight: FontWeight.bold,
-                                          )
-                                        ),
+                                        style: AppTheme.headingMedium,
                                       ),
                                     ),
                                     SizedBox(height: height * 0.02,),
@@ -435,7 +560,7 @@ class HomePageState extends State<HomePage> {
                                         children: [
                                           GestureDetector(
                                             onTap: (){
-                                              Navigator.push(context, MaterialPageRoute(builder: (context)=> const TailorsPage()));
+                                              Navigator.push(context, MaterialPageRoute(builder: (context)=> const TailorsListing()));
                                             },
                                             child: _buildGridItem('assets/svgs/img.png'),
                                           ),
@@ -460,6 +585,95 @@ class HomePageState extends State<HomePage> {
                                         ],
                                       ),
                                     ),
+                                    SizedBox(height: height * 0.02,), // Reduced gap
+                                    // Trending Rentals Section - Third section after categories
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Trending Rentals',
+                                          style: AppTheme.headingMedium,
+                                        ),
+                                        GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => const RentalPage(),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black,
+                                              borderRadius: BorderRadius.circular(15),
+                                            ),
+                                            child: Text(
+                                              'View All',
+                                              style: GoogleFonts.montserrat(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    SizedBox(height: height * 0.02,),
+                                    // Horizontal Rental Cards
+                                    if(rentals.isNotEmpty)
+                                      SizedBox(
+                                        height: 280,
+                                        child: ListView.builder(
+                                          scrollDirection: Axis.horizontal,
+                                          padding: EdgeInsets.only(left: 8),
+                                          physics: const BouncingScrollPhysics(),
+                                          itemCount: rentals.length,
+                                          itemBuilder: (context, index) {
+                                            final rental = rentals[index];
+                                            return RentalProductCard(
+                                              product: rental,
+                                              isFavorite: favoriteProductIds.contains(rental['documentID']),
+                                              onTap: () {
+                                                Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (context) => ProductPage(
+                                                      productID: rental['documentID'],
+                                                    ),
+                                                  ),
+                                                );
+                                              },
+                                              onFavoriteToggle: () {
+                                                addToFavorites(rental['documentID']);
+                                              },
+                                            );
+                                          },
+                                        ),
+                                      ),
+                                    if(!rentals.isNotEmpty)
+                                      SizedBox(
+                                        height: 280,
+                                        child: Center(
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(Icons.checkroom_outlined, 
+                                                       size: 50, color: Colors.grey[400]),
+                                                  SizedBox(height: 10),
+                                                  Text(
+                                                    "No rental items available",
+                                                    style: GoogleFonts.montserrat(
+                                                      color: Colors.grey[600],
+                                                      fontSize: 16,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                        ),
+                                    ),
                                     SizedBox(height: height * 0.04,),
                                     GestureDetector(
                                       onTap: (){
@@ -468,16 +682,22 @@ class HomePageState extends State<HomePage> {
                                       child: Row(
                                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
-                                          Text(
-                                            'Trending Tailors',
-                                            style: GoogleFonts.montserrat(
-                                              textStyle: TextStyle(
-                                                color: Colors.black,
-                                                fontSize: 20,
-                                                fontFamily: 'Manrope',
-                                                fontWeight: FontWeight.bold,
-                                              )
-                                            ),
+                                          Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                'Tailors',
+                                                style: AppTheme.headingMedium,
+                                              ),
+                                              Text(
+                                                'Trending tailors near you',
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 12,
+                                                  color: Colors.grey.shade600,
+                                                  fontWeight: FontWeight.w400,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                           Text(
                                             'More',
@@ -529,20 +749,54 @@ class HomePageState extends State<HomePage> {
                                             padding: const EdgeInsets.all(8.0),
                                             child: Column(
                                               children: [
-                                                SizedBox(
+                                                Container(
                                                   width: MediaQuery.of(context).size.width,
-                                                  child: ClipRRect(
-                                                    borderRadius: BorderRadius.circular(8),
-                                                    child: Image.network(
-                                                      tailor['businessImages'][0],
-                                                      fit: BoxFit.fill,
-                                                      loadingBuilder: (context, child, loadingProgress) {
-                                                        if (loadingProgress == null) return child;
-                                                        return Center(
-                                                          child: CircularProgressIndicator(),
-                                                        );
-                                                      },
-                                                    ),
+                                                  height: 200,
+                                                  child: Stack(
+                                                    children: [
+                                                      ClipRRect(
+                                                        borderRadius: BorderRadius.circular(8),
+                                                        child: CustomImageWidget(
+                                                          imageUrl: (tailor['businessImages'] != null && tailor['businessImages'].isNotEmpty) 
+                                                              ? tailor['businessImages'][0] 
+                                                              : 'https://via.placeholder.com/300x200.png?text=Fashion+Store',
+                                                          fit: BoxFit.cover,
+                                                          borderRadius: BorderRadius.circular(8),
+                                                          showShimmer: true,
+                                                        ),
+                                                      ),
+                                                      // Rating overlay - bottom right
+                                                      Positioned(
+                                                        bottom: 8,
+                                                        right: 8,
+                                                        child: Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color.fromRGBO(0, 0, 0, 0.7),
+                                                            borderRadius: BorderRadius.circular(12),
+                                                          ),
+                                                          child: Row(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            children: [
+                                                              Icon(
+                                                                Icons.star,
+                                                                color: Colors.green,
+                                                                size: 12,
+                                                              ),
+                                                              const SizedBox(width: 2),
+                                                              Text(
+                                                                '4.5',
+                                                                style: GoogleFonts.poppins(
+                                                                  color: Colors.white,
+                                                                  fontSize: 11,
+                                                                  fontWeight: FontWeight.w600,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ],
                                                   ),
                                                 ),
                                                 const SizedBox(height: 12,),
@@ -614,356 +868,90 @@ class HomePageState extends State<HomePage> {
                                 padding: EdgeInsets.symmetric(horizontal: 20.0, vertical: 0.0),
                                 child: Column(
                                   children: [
-                                    Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        'Trending Boutiques',
-                                        style: GoogleFonts.montserrat(
-                                          textStyle: TextStyle(
-                                            color: Colors.black,
-                                            fontSize: 20,
-                                            fontFamily: 'Manrope',
-                                            fontWeight: FontWeight.bold,
-                                          )
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          'Trending Designs',
+                                          style: AppTheme.headingMedium,
                                         ),
-                                      ),
+                                        GestureDetector(
+                                          onTap: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) => const BoutiqueListing(),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black,
+                                              borderRadius: BorderRadius.circular(15),
+                                            ),
+                                            child: Text(
+                                              'View All',
+                                              style: GoogleFonts.montserrat(
+                                                color: Colors.white,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                     SizedBox(height: height * 0.02,),
-                                    SizedBox(
-                                      height: 400,
-                                      width: MediaQuery.of(context).size.width,
-                                      child: boutiques.isNotEmpty
-                                          ? CardSwiper(
-                                        cardsCount: boutiques.length,
-                                        numberOfCardsDisplayed: 2,
-                                        maxAngle: 250,
-                                        backCardOffset: Offset(30, -30),
-                                        cardBuilder: (context, index, percentThresholdX, percentThresholdY) {
-                                          var boutique = boutiques[index];
-                                          bool isFavorite = favoriteStoreIds.contains(boutique['documentID']);
-                                          return ClipRRect(
-                                            borderRadius: BorderRadius.circular(15),
-                                            child: Container(
-                                              decoration: ShapeDecoration(
-                                                color: Colors.white,
-                                                shape: RoundedRectangleBorder(
-                                                  side: BorderSide(color: Colors.black.withOpacity(0.1)),
-                                                  borderRadius: BorderRadius.circular(20),
-                                                ),
-                                                shadows: [
-                                                  BoxShadow(
-                                                    color: Color(0x3F000000),
-                                                    blurRadius: 4,
-                                                    offset: Offset(2, 2),
-                                                    spreadRadius: 0,
-                                                  )
-                                                ],
-                                              ),
-                                              child: GestureDetector(
-                                                onTap: () {
-                                                  Navigator.push(
-                                                    context,
-                                                    MaterialPageRoute(
-                                                      builder: (context) =>
-                                                        BoutiqueProduct(
-                                                          storeID: boutique['documentID'],
-                                                        ),
-                                                    ),
-                                                  );
-                                                },
-                                                child: Container(
-                                                  width: (MediaQuery.of(context).size.width / 2) - 44,
-                                                  height: 400,
-                                                  decoration: ShapeDecoration(
-                                                    color: Colors.white,
-                                                    shape: RoundedRectangleBorder(
-                                                      borderRadius: BorderRadius.circular(10),
-                                                    ),
-                                                    shadows: [
-                                                      const BoxShadow(
-                                                        color: Color(0x3F000000),
-                                                        blurRadius: 2,
-                                                        offset: Offset(2, 2),
-                                                      )
-                                                    ],
-                                                  ),
-                                                  child: Column(
-                                                    children: [
-                                                      Expanded(
-                                                        flex: 3,
-                                                        child: SizedBox(
-                                                          width: MediaQuery.of(context).size.width,
-                                                          child: ClipRRect(
-                                                            borderRadius: const BorderRadius.only(
-                                                              topLeft: Radius.circular(10),
-                                                              topRight: Radius.circular(10),
-                                                            ),
-                                                            child: Image.network(
-                                                              boutique['businessImages'][0],
-                                                              fit: BoxFit.fill,
-                                                              loadingBuilder: (context, child, loadingProgress) {
-                                                                if (loadingProgress == null) return child;
-                                                                return const Center(
-                                                                  child: CircularProgressIndicator(),
-                                                                );
-                                                              },
-                                                            ),
-                                                          ),
+                                    Container(
+                                      height: 280,
+                                      child: trendingProducts.isNotEmpty
+                                          ? ListView.builder(
+                                              scrollDirection: Axis.horizontal,
+                                              padding: EdgeInsets.only(left: 8),
+                                              physics: const BouncingScrollPhysics(),
+                                              itemCount: trendingProducts.length,
+                                              itemBuilder: (context, index) {
+                                                return RentalProductCard(
+                                                  product: trendingProducts[index],
+                                                  isFavorite: favoriteProductIds.contains(trendingProducts[index]['documentID']),
+                                                  onTap: () {
+                                                    Navigator.push(
+                                                      context,
+                                                      MaterialPageRoute(
+                                                        builder: (context) => ProductPage(
+                                                          productID: trendingProducts[index]['documentID'],
                                                         ),
                                                       ),
-                                                      Expanded(
-                                                        flex: 1,
-                                                        child: Padding(
-                                                          padding: const EdgeInsets.all(8.0),
-                                                          child: Column(
-                                                            mainAxisAlignment: MainAxisAlignment.start,
-                                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                                            children: [
-                                                              Row(
-                                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                                children: [
-                                                                  Text(
-                                                                    boutique['businessName'] ?? '',
-                                                                    style: GoogleFonts.roboto(
-                                                                      textStyle: const TextStyle(
-                                                                        color: Colors.black,
-                                                                        fontFamily: 'Manrope',
-                                                                        fontSize: 18,
-                                                                        fontWeight: FontWeight.bold,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                  GestureDetector(
-                                                                    onTap: () => addToFavorites(boutique['documentID']),
-                                                                    child: Icon(
-                                                                      isFavorite
-                                                                          ? Icons.favorite
-                                                                          : Icons.favorite_border,
-                                                                      color: isFavorite ? Colors.red : null,
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                              const SizedBox(height: 1),
-                                                              Text(
-                                                                boutique['businessLocation'] ?? '',
-                                                                style: GoogleFonts.poppins(
-                                                                  textStyle: const TextStyle(
-                                                                    color: Colors.black,
-                                                                    fontSize: 12,
-                                                                    fontFamily: 'Manrope',
-                                                                    fontWeight: FontWeight.w400,
-                                                                  ),
-                                                                ),
-                                                                maxLines: 2,
-                                                                overflow: TextOverflow.ellipsis,
-                                                              ),
-                                                              const SizedBox(height: 4),
-                                                              Row(
-                                                                children: [
-                                                                  Text(
-                                                                    '${boutique['businessOpeningTime'] ?? '0'} - ${boutique['businessClosingTime'] ?? '0'}',
-                                                                    style: GoogleFonts.poppins(
-                                                                      textStyle: const TextStyle(
-                                                                        color: Colors.black,
-                                                                        fontSize: 16,
-                                                                        fontFamily: 'Manrope',
-                                                                        fontWeight: FontWeight.w400,
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
+                                                    );
+                                                  },
+                                                  onFavoriteToggle: () {
+                                                    addToFavorites(trendingProducts[index]['documentID']);
+                                                  },
+                                                );
+                                              },
+                                            )
+                                          : Container(
+                                              height: 280,
+                                              child: Center(
+                                                child: Column(
+                                                  mainAxisAlignment: MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(Icons.shopping_bag_outlined, 
+                                                         size: 50, color: Colors.grey[400]),
+                                                    SizedBox(height: 10),
+                                                    Text(
+                                                      "No trending products available",
+                                                      style: GoogleFonts.montserrat(
+                                                        color: Colors.grey[600],
+                                                        fontSize: 16,
                                                       ),
-                                                    ],
-                                                  ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
                                             ),
-                                          );
-                                        }
-                                      ) : null,
                                     ),
-                                    Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        'Trending Rentals',
-                                        style: GoogleFonts.montserrat(
-                                          textStyle: TextStyle(
-                                            color: Colors.black,
-                                            fontSize: 20,
-                                            fontFamily: 'Manrope',
-                                            fontWeight: FontWeight.bold,
-                                          )
-                                        ),
-                                      ),
-                                    ),
-                                    SizedBox(height: height * 0.02,),
-                                    SizedBox(
-                                      height: MediaQuery.of(context).size.height * 0.6,
-                                      child: rentals.isNotEmpty
-                                          ? MasonryGridView.count(
-                                        physics: const NeverScrollableScrollPhysics(),
-                                        crossAxisCount: 2,
-                                        mainAxisSpacing: 10,
-                                        crossAxisSpacing: 12,
-                                        itemCount: rentals.length,
-                                        itemBuilder: (context, index) {
-                                          var rental = rentals[index];
-                                          bool isFavorite = favoriteProductIds.contains(rental['documentID']);
-                        
-                                          return GestureDetector(
-                                            onTap: (){
-                                              Navigator.push(context, MaterialPageRoute(builder: (context)=> ProductPage(productID: rental['documentID'])));
-                                            },
-                                            child: Container(
-                                              width: (MediaQuery.of(context).size.width / 2) - 44,
-                                              height: (index % 2 == 0) ? 240 : 200,
-                                              decoration: ShapeDecoration(
-                                                color: Colors.white,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(10),
-                                                ),
-                                                shadows: [
-                                                  BoxShadow(
-                                                    color: Color(0x3F000000),
-                                                    blurRadius: 2,
-                                                    offset: Offset(2, 2),
-                                                    spreadRadius: 0,
-                                                  )
-                                                ],
-                        
-                                              ),
-                                              child: Column(
-                                                children: [
-                                                  Expanded(
-                                                    flex: 3,
-                                                    child: Container(
-                                                      width: MediaQuery.of(context).size.width,
-                                                      decoration: ShapeDecoration(
-                                                        color: Color(0xFFD9D9D9),
-                                                        shape: RoundedRectangleBorder(
-                                                          borderRadius: BorderRadius.only(
-                                                            topLeft: Radius.circular(10),
-                                                            topRight: Radius.circular(10),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      child: Padding(
-                                                        padding: const EdgeInsets.all(0.0),
-                                                        child: ClipRRect(
-                                                          borderRadius: BorderRadius.only(
-                                                            topLeft: Radius.circular(10),
-                                                            topRight: Radius.circular(10),
-                                                          ),
-                                                          child: Image.network(
-                                                            rental['productImages'][0],
-                                                            fit: BoxFit.cover,
-                                                            loadingBuilder: (context, child, loadingProgress) {
-                                                              if (loadingProgress == null) return child;
-                                                              return Center(
-                                                                child: CircularProgressIndicator(),
-                                                              );
-                                                            },
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  Expanded(
-                                                    flex: 2,
-                                                    child: Container(
-                                                      decoration: ShapeDecoration(
-                                                        color: Colors.white,
-                                                        shape: RoundedRectangleBorder(
-                                                          borderRadius: BorderRadius.circular(10),
-                                                        ),
-                                                      ),
-                                                      child: Padding(
-                                                        padding: const EdgeInsets.all(8.0),
-                                                        child: Column(
-                                                          mainAxisAlignment: MainAxisAlignment.start,
-                                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                                          children: [
-                                                            Row(
-                                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                              children: [
-                                                                Text(
-                                                                  rental['productName'] ?? '',
-                                                                  style: GoogleFonts.roboto(
-                                                                    textStyle: TextStyle(
-                                                                      color: Colors.black,
-                                                                      fontFamily: 'Manrope',
-                                                                      fontSize: 16,
-                                                                      fontWeight: FontWeight.w600,
-                                                                    )
-                                                                  ),
-                                                                ),
-                                                                GestureDetector(
-                                                                  onTap: () => addToFavorites(rental['documentID']),
-                                                                  child: Icon(
-                                                                    isFavorite ? Icons.favorite : Icons.favorite_border,
-                                                                    color: isFavorite ? Colors.red : null,
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                            const SizedBox(height: 2,),
-                                                            Text(
-                                                              rental['productDescription'] ?? '0',
-                                                              style: GoogleFonts.poppins(
-                                                                textStyle: TextStyle(
-                                                                  color: Color(0xFF848080),
-                                                                  fontWeight: FontWeight.w300,
-                                                                  fontSize: 12
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            Row(
-                                                              mainAxisAlignment: MainAxisAlignment.start,
-                                                              children: [
-                                                                Text(
-                                                                  '₹${rental['productPrice'] ?? '0'}',
-                                                                  style: GoogleFonts.poppins(
-                                                                    textStyle: TextStyle(
-                                                                      color: Colors.black,
-                                                                      fontSize: 16,
-                                                                      fontFamily: 'Manrope',
-                                                                      fontWeight: FontWeight.w500,
-                                                                    )
-                                                                  ),
-                                                                ),
-                                                                const SizedBox(width: 8,),
-                                                                Text(
-                                                                  '30% OFF',
-                                                                  style: GoogleFonts.poppins(
-                                                                    textStyle: TextStyle(
-                                                                      color: Color(0xFF949090),
-                                                                      fontSize: 8,
-                                                                      fontFamily: 'Manrope',
-                                                                      fontWeight: FontWeight.w500,
-                                                                    )
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  )
-                                                ],
-                                              ),
-                                            ),
-                                          );
-                                        },
-                                      )
-                                          : Center(child: CircularProgressIndicator()),
-                                    ),
-                                    // SizedBox(height: height * 0.02,),
                                   ],
                                 ),
                               ),
@@ -971,10 +959,6 @@ class HomePageState extends State<HomePage> {
                           ),
                         ),
                       ],
-                    )
-                  else
-                    Center(
-                      child: CircularProgressIndicator()
                     ),
                 ],
               ),
@@ -986,10 +970,11 @@ class HomePageState extends State<HomePage> {
     );
   }
 
+
+
   Widget _buildGridItem(String imagePath) {
     return Container(
       decoration: ShapeDecoration(
-        // color: Color(0xFFACDDDE),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
         ),
@@ -1005,11 +990,74 @@ class HomePageState extends State<HomePage> {
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 0.0, vertical: 0.0),
         child: Center(
-          child: Image.asset(
-            imagePath,
+          child: CustomAssetImageWidget(
+            assetPath: imagePath,
             fit: BoxFit.fitHeight,
+            borderRadius: BorderRadius.circular(10),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildCategoryCard({
+    required IconData icon,
+    required String title,
+    required Color iconColor,
+    required Color backgroundColor,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            backgroundColor,
+            backgroundColor.withOpacity(0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: backgroundColor.withOpacity(0.3),
+            blurRadius: 8,
+            offset: Offset(0, 4),
+            spreadRadius: 0,
+          )
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.9),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              icon,
+              size: 40,
+              color: iconColor,
+            ),
+          ),
+          SizedBox(height: 12),
+          Text(
+            title,
+            style: GoogleFonts.poppins(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+              shadows: [
+                Shadow(
+                  color: Colors.black26,
+                  offset: Offset(0, 1),
+                  blurRadius: 2,
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1033,66 +1081,176 @@ class HomePageState extends State<HomePage> {
     }
     return {};
   }
+
+  String _getImageUrl(Map<String, dynamic> product) {
+    if (product['productImages'] != null) {
+      final images = product['productImages'];
+      if (images is List && images.isNotEmpty) {
+        String url = images[0]?.toString() ?? '';
+        if (!url.contains('placeholder') && url.isNotEmpty) {
+          return url;
+        }
+      } else if (images is String && images.isNotEmpty) {
+        String url = images;
+        if (!url.contains('placeholder') && url.isNotEmpty) {
+          return url;
+        }
+      }
+    }
+    return 'https://via.placeholder.com/300';
+  }
+
+  int _getPrice(Map<String, dynamic> product) {
+    final price = product['productPrice'];
+    if (price == null) return 349;
+    
+    String priceStr = price.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+    if (priceStr.isEmpty) return 349;
+    
+    try {
+      double priceValue = double.parse(priceStr);
+      return priceValue.toInt();
+    } catch (e) {
+      return 349;
+    }
+  }
+
+  int? _getOriginalPrice(Map<String, dynamic> product) {
+    final originalPrice = product['originalPrice'] ?? product['mrp'];
+    if (originalPrice == null) return null;
+    
+    String priceStr = originalPrice.toString().replaceAll(RegExp(r'[^0-9.]'), '');
+    if (priceStr.isEmpty) return null;
+    
+    try {
+      double priceValue = double.parse(priceStr);
+      int originalPriceInt = priceValue.toInt();
+      int currentPrice = _getPrice(product);
+      // Only show original price if it's higher than current price
+      return originalPriceInt > currentPrice ? originalPriceInt : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  double _getRating(Map<String, dynamic> product) {
+    final rating = product['rating'];
+    if (rating == null) return 4.5;
+    
+    try {
+      return double.parse(rating.toString());
+    } catch (e) {
+      return 4.5;
+    }
+  }
+
+  int _getTotalRatings(Map<String, dynamic> product) {
+    final total = product['total'] ?? product['totalRatings'] ?? product['reviewCount'];
+    if (total == null) return 0;
+    
+    try {
+      return int.parse(total.toString());
+    } catch (e) {
+      return 0;
+    }
+  }
 }
 
 Widget returnBottomBar(BuildContext context) {
   return Container(
     width: MediaQuery.of(context).size.width,
-    height: 70,
+    height: 75,
     decoration: BoxDecoration(
-      border: Border(
-        top: BorderSide(width: 1.0, color: Colors.grey),
+      color: AppTheme.cardColor,
+      boxShadow: AppTheme.elevatedShadow,
+      borderRadius: BorderRadius.only(
+        topLeft: Radius.circular(AppTheme.largeRadius),
+        topRight: Radius.circular(AppTheme.largeRadius),
       ),
     ),
-    child: Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        bottomBarItem(context, 1, 'assets/icons/img_1.png', 'Home'),
-        bottomBarItem(context, 2, 'assets/icons/img_2.png', 'Boutiques'),
-        bottomBarItem(context, 3, 'assets/icons/img_3.png', 'Rental'),
-        bottomBarItem(context, 4, 'assets/icons/img_4.png', 'Fabric'),
-      ],
+    child: ClipRRect(
+      borderRadius: BorderRadius.only(
+        topLeft: Radius.circular(AppTheme.largeRadius),
+        topRight: Radius.circular(AppTheme.largeRadius),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          bottomBarItem(context, 1, 'assets/icons/img_1.png', 'Home'),
+          bottomBarItem(context, 2, 'assets/icons/img_2.png', 'Boutiques'),
+          bottomBarItem(context, 3, 'assets/icons/img_3.png', 'Rental'),
+          bottomBarItem(context, 5, 'assets/icons/img_5.png', 'Tailors'),
+          bottomBarItem(context, 4, 'assets/icons/img_4.png', 'Fabric'),
+        ],
+      ),
     ),
   );
 }
 
 Widget bottomBarItem(BuildContext context, int pageIndex, String imagePath, String title) {
-  return GestureDetector(
-    onTap: (){
-      if (pageIndex == 1) {
-        Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context)=> HomePage()), (route)=>false);
-      } else if (pageIndex == 2) {
-        Navigator.push(context, MaterialPageRoute(builder: (context)=> BoutiquePage()));
-      } else if (pageIndex == 3) {
-        Navigator.push(context, MaterialPageRoute(builder: (context)=> RentalPage()));
-      } else if (pageIndex == 4) {
-        Navigator.push(context, MaterialPageRoute(builder: (context)=> FabricsPage()));
-      }
-    },
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        Image.asset(
-          imagePath,
-          width: 20,
-          height: 20,
-          color: theSelectedPageID == pageIndex
-              ? Colors.black
-              : Colors.grey,
+  bool isSelected = theSelectedPageID == pageIndex;
+  
+  return AnimatedContainer(
+    duration: Duration(milliseconds: 200),
+    curve: Curves.easeInOut,
+    child: InkWell(
+      onTap: () {
+        HapticFeedback.lightImpact(); // Add haptic feedback
+        if (pageIndex == 1) {
+          Navigator.pushAndRemoveUntil(context, MaterialPageRoute(builder: (context) => HomePage()), (route) => false);
+        } else if (pageIndex == 2) {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => BoutiquePage()));
+        } else if (pageIndex == 3) {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => RentalPage()));
+        } else if (pageIndex == 5) {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => TailorsListing()));
+        } else if (pageIndex == 4) {
+          Navigator.push(context, MaterialPageRoute(builder: (context) => FabricsPage()));
+        }
+      },
+      borderRadius: BorderRadius.circular(15),
+      splashColor: const Color.fromRGBO(0, 0, 0, 0.1),
+      highlightColor: const Color.fromRGBO(0, 0, 0, 0.05),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            AnimatedScale(
+              scale: isSelected ? 1.2 : 1.0,
+              duration: Duration(milliseconds: 200),
+              curve: Curves.elasticOut,
+              child: AnimatedContainer(
+                duration: Duration(milliseconds: 200),
+                padding: EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color.fromRGBO(0, 0, 0, 0.1) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Image.asset(
+                  imagePath,
+                  width: 22,
+                  height: 22,
+                  color: isSelected ? Colors.black : Colors.grey[600],
+                ),
+              ),
+            ),
+            SizedBox(height: 2),
+            AnimatedDefaultTextStyle(
+              duration: AppTheme.shortAnimationDuration,
+              style: AppTheme.bodySmall.copyWith(
+                color: isSelected ? AppTheme.primaryTextColor : Colors.grey[600],
+                fontSize: isSelected ? 11 : 10,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              ),
+              child: Text(
+                title,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ],
         ),
-        Text(
-          title,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: theSelectedPageID == pageIndex
-                ? Colors.black
-                : Color(0xFF080000),
-            fontFamily: 'Poppins',
-            fontWeight: FontWeight.w500,
-            height: 0.22,
-          ),
-        ),
-      ],
+      ),
     ),
   );
 }

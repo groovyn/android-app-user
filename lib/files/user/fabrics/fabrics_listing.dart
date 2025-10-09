@@ -4,6 +4,7 @@ import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/user/product/product_page.dart';
 import 'package:groovyn/main.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 
 import '../mains/main_landing.dart';
 
@@ -339,20 +340,12 @@ class FabricsListingState extends State<FabricsListing> {
               children: [
                 Expanded(
                   flex: 3,
-                  child: ClipRRect(
+                  child: CustomImageWidget(
+                    imageUrl: fabric['productImages'][0],
+                    fit: BoxFit.cover,
                     borderRadius: const BorderRadius.only(
                       topLeft: Radius.circular(10),
                       topRight: Radius.circular(10),
-                    ),
-                    child: Image.network(
-                      fabric['productImages'][0],
-                      fit: BoxFit.cover,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const Center(
-                          child: CircularProgressIndicator(),
-                        );
-                      },
                     ),
                   ),
                 ),

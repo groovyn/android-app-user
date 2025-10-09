@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/user/orders/order_detail.dart';
 import 'package:groovyn/main.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
 
 class OrdersPage extends StatefulWidget {
   const OrdersPage({super.key});
@@ -99,23 +100,18 @@ class OrdersPageState extends State<OrdersPage> {
                                     side: BorderSide(width: 1, color: Color(0xFFD9D9D9)),
                                   ),
                                 ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(80),
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
-                                    child: order['images'] != null &&
-                                        (order['images'] as List).isNotEmpty
-                                        ? ClipRRect(
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 8.0, bottom: 8.0),
+                                  child: order['images'] != null &&
+                                      (order['images'] as List).isNotEmpty
+                                      ? CustomImageWidget(
+                                          imageUrl: order['images'][0],
+                                          width: 46,
+                                          height: 46,
+                                          fit: BoxFit.fitHeight,
                                           borderRadius: BorderRadius.circular(80),
-                                          child: Image.network(
-                                            order['images'][0],
-                                            width: 46,
-                                            height: 46,
-                                            fit: BoxFit.fitHeight,
-                                          ),
                                         )
-                                        : Icon(Icons.image, color: Colors.white),
-                                  ),
+                                      : Icon(Icons.image, color: Colors.white),
                                 ),
                               ),
                               const SizedBox(height: 6,),

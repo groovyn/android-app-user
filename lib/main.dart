@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'files/auth/login_path/splash_screen.dart';
 import 'firebase_options.dart';
+import 'theme/app_theme.dart';
 
 String theID = '';
 String theName = '';
@@ -51,10 +52,7 @@ class MyApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Groovyn',
         debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.black),
-          useMaterial3: true,
-        ),
+        theme: AppTheme.lightTheme,
         home: SplashScreen(),
         builder: EasyLoading.init(),
       ),

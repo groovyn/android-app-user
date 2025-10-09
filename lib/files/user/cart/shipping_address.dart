@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/user/cart/summary_page.dart';
+import 'package:groovyn/widgets/delivery_widget.dart';
 import 'package:http/http.dart' as http;
 
 import '../../../main.dart';
@@ -462,7 +463,12 @@ class ShippingAddressState extends State<ShippingAddress> {
                             const SizedBox(height: 16),
                             _buildTextField('City', _cityController),
                             const SizedBox(height: 16),
-                            _buildTextField('Pin Code', _pinCodeController),
+                            DeliveryEstimationWidget(
+                              pincodeController: _pinCodeController,
+                              onPincodeChanged: (pincode) {
+                                // Handle pincode change if needed
+                              },
+                            ),
                             const SizedBox(height: 16),
                             _buildDropdownField('State', (value) {
                               _selectedState = value;

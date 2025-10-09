@@ -235,7 +235,7 @@ class _CreateReviewPageState extends State<CreateReviewPage> {
                           hintStyle: GoogleFonts.poppins(
                             fontSize: 14,
                             fontWeight: FontWeight.w400,
-                            color: Colors.black.withOpacity(0.6),
+                            color: const Color.fromRGBO(0, 0, 0, 0.6),
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
@@ -266,7 +266,7 @@ class _CreateReviewPageState extends State<CreateReviewPage> {
                           hintStyle: GoogleFonts.poppins(
                             fontSize: 14,
                             fontWeight: FontWeight.w400,
-                            color: Colors.black.withOpacity(0.6),
+                            color: const Color.fromRGBO(0, 0, 0, 0.6),
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),

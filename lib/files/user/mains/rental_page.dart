@@ -5,7 +5,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:groovyn/files/user/mains/listing_page.dart';
 import 'package:groovyn/files/user/product/product_page.dart';
 import 'package:groovyn/main.dart';
+import 'package:groovyn/widgets/custom_image_widget.dart';
+import 'package:groovyn/widgets/product_card.dart';
 import 'package:pull_to_refresh/pull_to_refresh.dart';
+import 'package:groovyn/widgets/fashion_refresh_header.dart';
 
 import '../cart/cart_page.dart';
 import '../profile/profile_page.dart';
@@ -38,6 +41,125 @@ class RentalPageState extends State<RentalPage> {
     fetchAllStoresData();
   }
 
+
+  // Helper methods for ProductCard data extraction
+  String _getImageUrl(Map<String, dynamic> product) {
+    if (product['productImages'] != null && product['productImages'].isNotEmpty) {
+      return product['productImages'][0] ?? '';
+    }
+    return '';
+  }
+
+  int _getPrice(Map<String, dynamic> product) {
+    // Check if there's a dynamic discount to apply
+    final originalPrice = _getOriginalPriceRaw(product);
+    if (originalPrice != null) {
+      final discount = _getDiscountPercentage(product);
+      if (discount > 0) {
+        return (originalPrice * (1 - discount / 100)).round();
+      }
+    }
+    
+    if (product['productPrice'] != null) {
+      if (product['productPrice'] is int) {
+        return product['productPrice'];
+      } else if (product['productPrice'] is String) {
+        return int.tryParse(product['productPrice']) ?? 0;
+      }
+    }
+    return 0;
+  }
+
+  int? _getOriginalPrice(Map<String, dynamic> product) {
+    // First check for explicit original price fields
+    final originalPriceRaw = _getOriginalPriceRaw(product);
+    if (originalPriceRaw != null && originalPriceRaw > 0) {
+      return originalPriceRaw;
+    }
+    
+    // Check for dedicated originalPrice field
+    if (product['productOriginalPrice'] != null) {
+      if (product['productOriginalPrice'] is int) {
+        return product['productOriginalPrice'];
+      } else if (product['productOriginalPrice'] is String) {
+        final parsed = int.tryParse(product['productOriginalPrice']);
+        if (parsed != null && parsed > 0) return parsed;
+      }
+    }
+    
+    // Only show original price if there's a discount percentage or we have explicit original price
+    final currentPrice = _getPrice(product);
+    final discountPercentage = _getDiscountPercentage(product);
+    
+    if (discountPercentage > 0 && currentPrice > 0) {
+      return (currentPrice / (1 - discountPercentage / 100)).round();
+    }
+    
+    return null; // Don't show original price if no discount exists
+  }
+
+  double? _getRating(Map<String, dynamic> product) {
+    if (product['rating'] != null && product['rating'].toString() != '0') {
+      if (product['rating'] is double) {
+        return product['rating'];
+      } else if (product['rating'] is String) {
+        return double.tryParse(product['rating']);
+      }
+    }
+    return 4.5;
+  }
+
+  int? _getTotalRatings(Map<String, dynamic> product) {
+    if (product['total'] != null && product['total'].toString() != '0') {
+      if (product['total'] is int) {
+        return product['total'];
+      } else if (product['total'] is String) {
+        return int.tryParse(product['total']);
+      }
+    }
+    return 0;
+  }
+
+  int? _getOriginalPriceRaw(Map<String, dynamic> product) {
+    // Get raw original price without discount calculation
+    final originalPrice = product['originalPrice'] ?? 
+                         product['mrp'] ?? 
+                         product['productOriginalPrice'] ?? 
+                         product['productMRP'];
+    if (originalPrice == null) return null;
+    
+    if (originalPrice is int) {
+      return originalPrice;
+    } else if (originalPrice is String) {
+      return int.tryParse(originalPrice);
+    }
+    return null;
+  }
+  
+  double _getDiscountPercentage(Map<String, dynamic> product) {
+    final discount = product['discount'] ?? 
+                    product['productDiscount'] ?? 
+                    product['discountPercentage'] ??
+                    product['discountPercent'];
+    if (discount == null) return 0.0;
+    
+    try {
+      if (discount is num) {
+        return discount.toDouble();
+      } else if (discount is String) {
+        // Remove % symbol if present
+        String discountStr = discount.replaceAll('%', '').replaceAll(RegExp(r'[^0-9.]'), '');
+        if (discountStr.isNotEmpty) {
+          return double.parse(discountStr);
+        }
+      }
+    } catch (e) {
+      // Return 0 if parsing fails
+    }
+    
+    return 0.0;
+  }
+
   Future<void> _handleRefresh() async {
     await fetchRentals();
     await fetchAllStoresData();
@@ -45,28 +167,137 @@ class RentalPageState extends State<RentalPage> {
   }
 
   Future<void> fetchRentals() async {
-    QuerySnapshot querySnapshot = await FirebaseFirestore.instance
-        .collection('products')
-        .where('status', isEqualTo: true)
-        .where('trending', isEqualTo: true)
-        .get();
-    List<Map<String, dynamic>> fetchedRentals = [];
+    setState(() {
+      isLoading = true;
+    });
 
-    for (var doc in querySnapshot.docs) {
-      var productData = doc.data() as Map<String, dynamic>;
-      productData['documentID'] = doc.id;
-      Map<String, String> map = await fetchReviews(doc.id);
-      productData['total'] =  map['total'];
-      productData['rating'] =  map['rating'];
-      DocumentSnapshot storeDoc = await FirebaseFirestore.instance.collection('stores').doc(productData['productStoreID']).get();
-      if (storeDoc.exists && storeDoc['businessField'] == 'Rental') {
-        fetchedRentals.add(productData);
+    try {
+      QuerySnapshot querySnapshot = await FirebaseFirestore.instance
+          .collection('products')
+          .where('status', isEqualTo: true)
+          .where('trending', isEqualTo: true)
+          .limit(15)
+          .get();
+
+      if (querySnapshot.docs.isEmpty) {
+        setState(() {
+          rentals = [];
+          isLoading = false;
+        });
+        return;
+      }
+
+      // Get all unique store IDs
+      Set<String> storeIds = {};
+      Map<String, Map<String, dynamic>> productDataMap = {};
+      
+      for (var doc in querySnapshot.docs) {
+        var productData = doc.data() as Map<String, dynamic>;
+        productData['documentID'] = doc.id;
+        productDataMap[doc.id] = productData;
+        
+        String? storeId = productData['productStoreID'];
+        if (storeId != null) {
+          storeIds.add(storeId);
+        }
+      }
+
+      // Batch fetch store data using whereIn for better performance
+      Map<String, String> storeBusinessFields = {};
+      if (storeIds.isNotEmpty) {
+        try {
+          // Convert to list and split into chunks if needed (Firestore has 10-item limit for whereIn)
+          List<String> storeIdsList = storeIds.toList();
+          List<List<String>> chunks = [];
+          for (int i = 0; i < storeIdsList.length; i += 10) {
+            chunks.add(storeIdsList.sublist(i, 
+                i + 10 > storeIdsList.length ? storeIdsList.length : i + 10));
+          }
+          
+          List<Future<QuerySnapshot>> queries = chunks.map((chunk) {
+            return FirebaseFirestore.instance
+                .collection('stores')
+                .where(FieldPath.documentId, whereIn: chunk)
+                .get();
+          }).toList();
+          
+          List<QuerySnapshot> results = await Future.wait(queries);
+          for (QuerySnapshot snapshot in results) {
+            for (DocumentSnapshot storeDoc in snapshot.docs) {
+              var storeData = storeDoc.data() as Map<String, dynamic>;
+              storeBusinessFields[storeDoc.id] = storeData['businessField'] ?? '';
+            }
+          }
+        } catch (e) {
+          print('Error batch fetching stores: $e');
+          // Fallback to individual queries if batch fails
+          for (String storeId in storeIds) {
+            try {
+              DocumentSnapshot storeDoc = await FirebaseFirestore.instance
+                  .collection('stores').doc(storeId).get();
+              if (storeDoc.exists) {
+                var storeData = storeDoc.data() as Map<String, dynamic>;
+                storeBusinessFields[storeId] = storeData['businessField'] ?? '';
+              }
+            } catch (e) {
+              print('Error fetching store $storeId: $e');
+            }
+          }
+        }
+      }
+
+      // Filter rental products and add default ratings
+      List<Map<String, dynamic>> fetchedRentals = [];
+      for (var productData in productDataMap.values) {
+        String? storeId = productData['productStoreID'];
+        if (storeId != null && storeBusinessFields[storeId] == 'Rental') {
+          // Add default rating data (we'll load reviews asynchronously later)
+          productData['total'] = '0';
+          productData['rating'] = '4.5';
+          fetchedRentals.add(productData);
+        }
+      }
+
+      setState(() {
+        rentals = fetchedRentals;
+        isLoading = false;
+      });
+
+      // Load reviews asynchronously in background
+      _loadReviewsInBackground(fetchedRentals);
+
+    } catch (e) {
+      print('Error fetching rentals: $e');
+      setState(() {
+        rentals = [];
+        isLoading = false;
+      });
+    }
+  }
+
+  void _loadReviewsInBackground(List<Map<String, dynamic>> products) async {
+    // Load reviews for each product in background
+    for (int i = 0; i < products.length; i++) {
+      try {
+        var product = products[i];
+        Map<String, String> reviewData = await fetchReviews(product['documentID']);
+        
+        // Update the product data
+        setState(() {
+          if (i < rentals.length) {
+            rentals[i]['total'] = reviewData['total'] ?? '0';
+            rentals[i]['rating'] = reviewData['rating'] ?? '4.5';
+          }
+        });
+        
+        // Small delay to avoid overwhelming the UI
+        if (i < products.length - 1) {
+          await Future.delayed(Duration(milliseconds: 100));
+        }
+      } catch (e) {
+        print('Error loading reviews for product: $e');
       }
     }
-
-    setState(() {
-      rentals = fetchedRentals;
-    });
   }
 
   Future<Map<String, String>> fetchReviews(String productID) async {
@@ -158,6 +389,7 @@ class RentalPageState extends State<RentalPage> {
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     final height = MediaQuery.of(context).size.height;
@@ -174,26 +406,7 @@ class RentalPageState extends State<RentalPage> {
               controller: _refreshController,
               enablePullDown: true,
               onRefresh: _handleRefresh,
-              header: CustomHeader(
-                builder: (context, mode) {
-                  return Center(
-                    child: Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 90.0),
-                          child: Center(
-                            child: Image.asset(
-                              'assets/images/loading.gif',
-                              height: 100,
-                              width: 100,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
+              header: FashionRefreshHeader(customText: "Pull for rental updates"),
               child: ListView(
                 children: [
                   Padding(
@@ -217,12 +430,21 @@ class RentalPageState extends State<RentalPage> {
                       ),
                       child: Row(
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.all(4.0),
-                            child: Image.asset(
-                              'assets/icons/img_8.png',
-                              width: 40,
-                              height: 40,
+                          GestureDetector(
+                            onTap: () {
+                              Navigator.pushAndRemoveUntil(
+                                context,
+                                MaterialPageRoute(builder: (context) => const HomePage()),
+                                (route) => false,
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(4.0),
+                              child: Image.asset(
+                                'assets/icons/img_8.png',
+                                width: 40,
+                                height: 40,
+                              ),
                             ),
                           ),
                           Flexible(
@@ -236,7 +458,7 @@ class RentalPageState extends State<RentalPage> {
                                   decoration: InputDecoration(
                                     border: InputBorder.none,
                                     contentPadding: EdgeInsets.only(top: 8, bottom: 12, left: 8),
-                                    hintText: 'Search',
+                                    hintText: 'Search rental items, brands...',
                                     enabled: false,
                                     hintStyle: GoogleFonts.montserrat(
                                       textStyle: GoogleFonts.poppins(
@@ -380,6 +602,119 @@ class RentalPageState extends State<RentalPage> {
                             ),
                           ),
                           const SizedBox(height: 20,),
+                          // Trending Rentals Section - Moved up before Rental Houses
+                          GestureDetector(
+                            onTap: (){
+                              Navigator.push(context, MaterialPageRoute(builder: (context)=> const ListingPage(isSearch: false)));
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: 20.0, right: 20.0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    'Trending Rentals',
+                                    style: GoogleFonts.montserrat(
+                                      textStyle: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 20,
+                                        fontFamily: 'Manrope',
+                                        fontWeight: FontWeight.bold,
+                                      )
+                                    ),
+                                  ),
+                                  Text(
+                                    'View all',
+                                    style: GoogleFonts.poppins(
+                                      textStyle: TextStyle(
+                                        color: Colors.black,
+                                        fontSize: 14,
+                                        fontFamily: 'Poppins',
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: height * 0.02,),
+                          // Modern Grid Layout with ProductCard
+                          Container(
+                            height: MediaQuery.of(context).size.height * 0.5,
+                            padding: const EdgeInsets.symmetric(horizontal: 12.0),
+                            child: rentals.isNotEmpty
+                                ? GridView.builder(
+                              physics: const BouncingScrollPhysics(),
+                              padding: const EdgeInsets.only(left: 4, right: 4, bottom: 20),
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                mainAxisSpacing: 12,
+                                crossAxisSpacing: 12,
+                                childAspectRatio: 0.7,
+                              ),
+                              itemCount: rentals.length,
+                              itemBuilder: (context, index) {
+                                final rental = rentals[index];
+                                return ProductCard(
+                                  imageUrl: _getImageUrl(rental),
+                                  name: rental['productBrand']?.toString() ?? 'Fashion Brand',
+                                  description: rental['productName']?.toString() ?? 'Stylish Fashion Item',
+                                  price: _getPrice(rental),
+                                  originalPrice: _getOriginalPrice(rental),
+                                  isFavorite: favoriteProductIds.contains(rental['documentID']),
+                                  rating: _getRating(rental),
+                                  totalRatings: _getTotalRatings(rental),
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => ProductPage(
+                                          productID: rental['documentID'],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  onFavoriteToggle: () {
+                                    addToFavorites(rental['documentID']);
+                                  },
+                                );
+                              },
+                            )
+                                : Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.shopping_bag_outlined,
+                                    size: 80,
+                                    color: Colors.grey.shade400,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No trending rentals found',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Check back later for new arrivals',
+                                    style: GoogleFonts.poppins(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // TODO: Uncomment Rental Houses section when ready
+                          /*
+                          SizedBox(height: height * 0.02,),
                           Padding(
                             padding: const EdgeInsets.only(left: 20.0, right: 20.0),
                             child: Align(
@@ -445,15 +780,13 @@ class RentalPageState extends State<RentalPage> {
                                                 topLeft: Radius.circular(10),
                                                 topRight: Radius.circular(10),
                                               ),
-                                              child: Image.network(
-                                                rental['businessImage'],
+                                              child: CustomImageWidget(
+                                                imageUrl: _getProductImage(rental),
                                                 fit: BoxFit.fill,
-                                                loadingBuilder: (context, child, loadingProgress) {
-                                                  if (loadingProgress == null) return child;
-                                                  return Center(
-                                                    child: CircularProgressIndicator(),
-                                                  );
-                                                },
+                                                borderRadius: const BorderRadius.only(
+                                                  topLeft: Radius.circular(10),
+                                                  topRight: Radius.circular(10),
+                                                ),
                                               ),
                                             ),
                                           ),
@@ -467,7 +800,7 @@ class RentalPageState extends State<RentalPage> {
                                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                   children: [
                                                     Text(
-                                                      rental['businessName'] ?? '',
+                                                      rental['productName'] ?? '',
                                                       style: GoogleFonts.roboto(
                                                         textStyle: TextStyle(
                                                           color: Colors.black,
@@ -487,38 +820,42 @@ class RentalPageState extends State<RentalPage> {
                                                   ],
                                                 ),
                                                 Row(
-                                                  mainAxisAlignment: MainAxisAlignment.start,
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                                   children: [
-                                                    Text(
-                                                      '${rental['businessLocation'] ?? '0'}',
-                                                      style: GoogleFonts.poppins(
-                                                        textStyle: TextStyle(
-                                                          color: Colors.black,
-                                                          fontSize: 18,
-                                                          fontFamily: 'Manrope',
-                                                          fontWeight: FontWeight.w400,
-                                                        )
+                                                    Flexible(
+                                                      child: Text(
+                                                        '₹${_getProductPrice(rental)}',
+                                                        style: GoogleFonts.poppins(
+                                                          textStyle: TextStyle(
+                                                            color: Colors.black,
+                                                            fontSize: 16,
+                                                            fontFamily: 'Manrope',
+                                                            fontWeight: FontWeight.w600,
+                                                          )
+                                                        ),
+                                                        overflow: TextOverflow.ellipsis,
                                                       ),
                                                     ),
                                                     const SizedBox(width: 8,),
-                                                    Center(
-                                                      child: Row(
-                                                        children: [
-                                                          Icon(
-                                                            Icons.star,
-                                                            color: Colors.yellow,
-                                                          ),
-                                                          const SizedBox(width: 8,),
-                                                          Text(
-                                                            "${rental['businessOpeningTime']}-${rental['businessClosingTime']}",
-                                                            style: GoogleFonts.poppins(
-                                                              textStyle: TextStyle(
-                                                                fontWeight: FontWeight.w600,
-                                                              ),
+                                                    Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(
+                                                          Icons.star,
+                                                          color: Colors.yellow,
+                                                          size: 16,
+                                                        ),
+                                                        const SizedBox(width: 4,),
+                                                        Text(
+                                                          "${rental['productRating'] ?? '4.2'}",
+                                                          style: GoogleFonts.poppins(
+                                                            textStyle: TextStyle(
+                                                              fontSize: 14,
+                                                              fontWeight: FontWeight.w600,
                                                             ),
                                                           ),
-                                                        ],
-                                                      ),
+                                                        ),
+                                                      ],
                                                     ),
                                                   ],
                                                 ),
@@ -533,225 +870,7 @@ class RentalPageState extends State<RentalPage> {
                               ),
                             ),
                           ),
-                          const SizedBox(height: 20,),
-                          GestureDetector(
-                            onTap: (){
-                              Navigator.push(context, MaterialPageRoute(builder: (context)=> const ListingPage(isSearch: false)));
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: 20.0, right: 20.0),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Trending Rentals',
-                                    style: GoogleFonts.montserrat(
-                                      textStyle: TextStyle(
-                                        color: Colors.black,
-                                        fontSize: 20,
-                                        fontFamily: 'Manrope',
-                                        fontWeight: FontWeight.bold,
-                                      )
-                                    ),
-                                  ),
-                                  Text(
-                                    'View all',
-                                    style: GoogleFonts.poppins(
-                                      textStyle: TextStyle(
-                                        color: Colors.black,
-                                        fontSize: 10,
-                                        fontFamily: 'Poppins',
-                                        fontWeight: FontWeight.w400,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          SizedBox(height: height * 0.02,),
-                          Padding(
-                            padding: const EdgeInsets.only(left: 20.0, right: 20.0),
-                            child: SizedBox(
-                              height: MediaQuery.of(context).size.height * 0.6,
-                              child: rentals.isNotEmpty
-                                  ? MasonryGridView.count(
-                                physics: const NeverScrollableScrollPhysics(),
-                                crossAxisCount: 2,
-                                mainAxisSpacing: 10,
-                                crossAxisSpacing: 12,
-                                itemCount: rentals.length,
-                                itemBuilder: (context, index) {
-                                  var rental = rentals[index];
-                                  bool isFavorite = favoriteProductIds.contains(rental['documentID']);
-
-                                  return GestureDetector(
-                                    onTap: (){
-                                      Navigator.push(context, MaterialPageRoute(builder: (context)=> ProductPage(productID: rental['documentID'])));
-                                    },
-                                    child: Container(
-                                      width: (MediaQuery.of(context).size.width / 2) - 44,
-                                      height: (index % 2 == 0) ? 240 : 200,
-                                      decoration: ShapeDecoration(
-                                        color: Colors.white,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(10),
-                                        ),
-                                        shadows: [
-                                          BoxShadow(
-                                            color: Color(0x3F000000),
-                                            blurRadius: 2,
-                                            offset: Offset(2, 2),
-                                            spreadRadius: 0,
-                                          )
-                                        ],
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Flexible(
-                                            flex: 3,
-                                            child: Container(
-                                              width: MediaQuery.of(context).size.width,
-                                              decoration: ShapeDecoration(
-                                                color: Color(0xFFD9D9D9),
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.only(
-                                                    topLeft: Radius.circular(10),
-                                                    topRight: Radius.circular(10),
-                                                  ),
-                                                ),
-                                              ),
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(0.0),
-                                                child: ClipRRect(
-                                                  borderRadius: BorderRadius.only(
-                                                    topLeft: Radius.circular(10),
-                                                    topRight: Radius.circular(10),
-                                                  ),
-                                                  child: Image.network(
-                                                    rental['productImages'][0],
-                                                    fit: BoxFit.cover,
-                                                    loadingBuilder: (context, child, loadingProgress) {
-                                                      if (loadingProgress == null) return child;
-                                                      return Center(
-                                                        child: CircularProgressIndicator(),
-                                                      );
-                                                    },
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          Flexible(
-                                            flex: 2,
-                                            child: Container(
-                                              decoration: ShapeDecoration(
-                                                color: Colors.white,
-                                                shape: RoundedRectangleBorder(
-                                                  borderRadius: BorderRadius.circular(10),
-                                                ),
-                                              ),
-                                              child: Padding(
-                                                padding: const EdgeInsets.all(8.0),
-                                                child: Column(
-                                                  mainAxisAlignment: MainAxisAlignment.start,
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(
-                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                      children: [
-                                                        Text(
-                                                          rental['productName'] ?? '',
-                                                          style: GoogleFonts.roboto(
-                                                              textStyle: TextStyle(
-                                                                color: Colors.black,
-                                                                fontFamily: 'Manrope',
-                                                                fontSize: 18,
-                                                                fontWeight: FontWeight.bold,
-                                                              )
-                                                          ),
-                                                        ),
-                                                        GestureDetector(
-                                                          onTap: () => addToFavorites(rental['documentID']),
-                                                          child: Icon(
-                                                            isFavorite ? Icons.favorite : Icons.favorite_border,
-                                                            color: isFavorite ? Colors.red : null,
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    const SizedBox(height: 2,),
-                                                    Flexible(
-                                                      child: Center(
-                                                        child: Row(
-                                                          children: [
-                                                            Icon(
-                                                              Icons.star,
-                                                              color: Colors.yellow,
-                                                            ),
-                                                            const SizedBox(width: 8,),
-                                                            Text(
-                                                              rental['rating'] ?? '0',
-                                                              style: GoogleFonts.poppins(
-                                                                textStyle: TextStyle(
-                                                                  fontWeight: FontWeight.w600,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                            Text(
-                                                              "(${rental['total'] ?? '0'})",
-                                                              style: GoogleFonts.poppins(
-                                                                textStyle: TextStyle(
-                                                                  fontWeight: FontWeight.w400,
-                                                                ),
-                                                              ),
-                                                            ),
-                                                          ],
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    Row(
-                                                      mainAxisAlignment: MainAxisAlignment.start,
-                                                      children: [
-                                                        Text(
-                                                          '₹${rental['productPrice'] ?? '0'}',
-                                                          style: GoogleFonts.poppins(
-                                                              textStyle: TextStyle(
-                                                                color: Colors.black,
-                                                                fontSize: 16,
-                                                                fontFamily: 'Manrope',
-                                                                fontWeight: FontWeight.w600,
-                                                              )
-                                                          ),
-                                                        ),
-                                                        const SizedBox(width: 8,),
-                                                        Text(
-                                                          '30% OFF',
-                                                          style: GoogleFonts.poppins(
-                                                              textStyle: TextStyle(
-                                                                color: Colors.black,
-                                                                fontSize: 8,
-                                                                fontFamily: 'Manrope',
-                                                                fontWeight: FontWeight.w500,
-                                                              )
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                            ),
-                                          )
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              )
-                                  : Center(child: CircularProgressIndicator()),
-                            ),
-                          ),
+                          */
                         ],
                       ),
                     ),
