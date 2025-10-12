@@ -75,9 +75,18 @@ downloaded_images/
 # Logs
 *.log
 
-# Service account keys (IMPORTANT - never commit!)
+# Service account keys and signing keys (IMPORTANT - never commit!)
 service-account-key.json
 **/service-account-key.json
+
+# Android signing keys and keystore files
+**/key.properties
+*.jks
+*.keystore
+encryption_public_key.pem
+encrypted_private_key.zip
+pepk.jar
+upload_certificate.pem
 
 # Test
 test/
