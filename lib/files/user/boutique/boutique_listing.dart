@@ -26,6 +26,19 @@ class BoutiqueListingState extends State<BoutiqueListing> {
 
   String currentSort = 'Popularity'; // Track current sort option
 
+  // Category filter
+  String? selectedCategory;
+  final List<String> categories = [
+    "All",
+    "Suit Men",
+    "Kurta Men",
+    "Saree",
+    "Lehenga",
+    "Sherwani",
+    "Gown",
+    "Kurtis"
+  ];
+
   // Filter options
   RangeValues priceRange = const RangeValues(0, 10000);
   List<String> selectedBrands = [];
@@ -141,6 +154,14 @@ class BoutiqueListingState extends State<BoutiqueListing> {
           }
         }
 
+        // Category filter
+        if (selectedCategory != null && selectedCategory != "All") {
+          final productName = rental['productName']?.toString().toLowerCase() ?? '';
+          if (!productName.contains(selectedCategory!.toLowerCase())) {
+            return false;
+          }
+        }
+
         // Apply all other filters
         return _applyFilters(rental);
       }).toList();
@@ -149,6 +170,14 @@ class BoutiqueListingState extends State<BoutiqueListing> {
   }
 
   bool _applyFilters(Map<String, dynamic> product) {
+    // Category filter
+    if (selectedCategory != null && selectedCategory != "All") {
+      final productName = product['productName']?.toString().toLowerCase() ?? '';
+      if (!productName.contains(selectedCategory!.toLowerCase())) {
+        return false;
+      }
+    }
+
     // Price range filter
     int price = _getPrice(product);
     if (price < priceRange.start || price > priceRange.end) {
@@ -314,7 +343,9 @@ class BoutiqueListingState extends State<BoutiqueListing> {
           children: [
             const SizedBox(height: 20),
             _buildSearchBar(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            _buildCategoryScroller(),
+            const SizedBox(height: 16),
             Expanded(
               child: _buildRentalsList(),
             ),
@@ -324,6 +355,53 @@ class BoutiqueListingState extends State<BoutiqueListing> {
       floatingActionButton: _buildBottomSortFilter(),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: returnBottomBar(context),
+    );
+  }
+
+  Widget _buildCategoryScroller() {
+    return Container(
+      height: 50,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length,
+        itemBuilder: (context, index) {
+          final category = categories[index];
+          final isSelected = selectedCategory == category || (selectedCategory == null && category == "All");
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                selectedCategory = category;
+                filterSearchResults(searchController.text);
+              });
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.black : Colors.white,
+                borderRadius: BorderRadius.circular(25),
+                border: Border.all(
+                  color: isSelected ? Colors.black : Colors.grey.shade300,
+                  width: 1,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  category,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected ? Colors.white : Colors.black87,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -522,7 +600,7 @@ class BoutiqueListingState extends State<BoutiqueListing> {
         crossAxisCount: 2,
         mainAxisSpacing: 8,
         crossAxisSpacing: 8,
-        childAspectRatio: 0.7,
+        childAspectRatio: 0.65, // Increased card height for better appearance
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       itemCount: filteredRentals.length,
@@ -530,8 +608,8 @@ class BoutiqueListingState extends State<BoutiqueListing> {
         final product = filteredRentals[index];
         return ProductCard(
           imageUrl: _getImageUrl(product),
-          name: product['productBrand']?.toString() ?? 'Fashion Brand',
-          description: product['productName']?.toString() ?? 'Stylish Fashion Item',
+          name: product['productName']?.toString() ?? 'Fashion Item',
+          description: product['productBrand']?.toString() ?? 'Brand',
           price: _getPrice(product),
           originalPrice: _getOriginalPrice(product),
           isFavorite: favoriteProductIds.contains(product['documentID']),
@@ -856,6 +934,7 @@ class BoutiqueListingState extends State<BoutiqueListing> {
                       onPressed: () {
                         setState(() {
                           priceRange = const RangeValues(0, 10000);
+                          selectedCategory = null;
                           selectedBrands = [];
                           selectedSizes = [];
                           selectedColors = [];
@@ -878,6 +957,7 @@ class BoutiqueListingState extends State<BoutiqueListing> {
                 ),
                 const SizedBox(height: 20),
                 _buildFilterOption('Price Range', Icons.attach_money),
+                _buildFilterOption('Category', Icons.category),
                 _buildFilterOption('Brand', Icons.local_offer),
                 _buildFilterOption('Size', Icons.straighten),
                 _buildFilterOption('Color', Icons.palette),
@@ -909,6 +989,8 @@ class BoutiqueListingState extends State<BoutiqueListing> {
         // Show specific filter dialog based on selection
         if (title == 'Price Range') {
           _showPriceRangeDialog();
+        } else if (title == 'Category') {
+          _showCategoryFilterDialog();
         } else if (title == 'Brand') {
           _showBrandFilterDialog();
         } else if (title == 'Size') {
@@ -920,6 +1002,59 @@ class BoutiqueListingState extends State<BoutiqueListing> {
         } else if (title == 'In Stock') {
           _showInStockFilterDialog();
         }
+      },
+    );
+  }
+
+  void _showCategoryFilterDialog() {
+    String? tempSelectedCategory = selectedCategory;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Select Category', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: categories.map((category) {
+                    return RadioListTile<String>(
+                      title: Text(category, style: GoogleFonts.poppins()),
+                      value: category,
+                      groupValue: tempSelectedCategory ?? "All",
+                      activeColor: const Color(0xFF6366F1),
+                      onChanged: (String? value) {
+                        setDialogState(() {
+                          tempSelectedCategory = value;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      selectedCategory = tempSelectedCategory;
+                      _applyAllFilters();
+                    });
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
+                  child: Text('Apply', style: GoogleFonts.poppins(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
       },
     );
   }

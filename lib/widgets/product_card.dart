@@ -40,8 +40,8 @@ class ProductCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Image section
-            Expanded(
-              flex: 4, // Increased to 4 for better image visibility
+            AspectRatio(
+              aspectRatio: 0.85, // Adjusted ratio to prevent overflow
               child: Stack(
                 children: [
                   Container(
@@ -147,8 +147,8 @@ class ProductCard extends StatelessWidget {
               ),
             ),
             // Content section
-            Container(
-              padding: const EdgeInsets.all(6.0),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6.0, 4.0, 6.0, 4.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
@@ -158,22 +158,23 @@ class ProductCard extends StatelessWidget {
                     name,
                     style: AppTheme.bodySmall.copyWith(
                       fontWeight: FontWeight.w600,
+                      fontSize: 10,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1),
                   // Product description
                   Text(
                     description,
                     style: AppTheme.bodyMedium.copyWith(
                       fontWeight: FontWeight.w500,
-                      fontSize: 11,
+                      fontSize: 10,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 3),
                   // Price section - Single line with proper overflow handling
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -188,16 +189,16 @@ class ProductCard extends StatelessWidget {
                                 Text(
                                   '₹$price',
                                   style: AppTheme.priceText.copyWith(
-                                    fontSize: 14,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 if (originalPrice != null && originalPrice! > price) ...[
-                                  const SizedBox(width: 4),
+                                  const SizedBox(width: 3),
                                   Text(
                                     '₹$originalPrice',
                                     style: GoogleFonts.poppins(
-                                      fontSize: 10,
+                                      fontSize: 9,
                                       fontWeight: FontWeight.w500,
                                       color: Colors.grey.shade500,
                                       decoration: TextDecoration.lineThrough,
@@ -210,19 +211,19 @@ class ProductCard extends StatelessWidget {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1.5),
                         decoration: BoxDecoration(
-                          color: originalPrice != null && originalPrice! > price 
-                              ? Colors.green 
+                          color: originalPrice != null && originalPrice! > price
+                              ? Colors.green
                               : Colors.orange.shade600,
-                          borderRadius: BorderRadius.circular(4),
+                          borderRadius: BorderRadius.circular(3),
                         ),
                         child: Text(
                           originalPrice != null && originalPrice! > price
                               ? '${(((originalPrice! - price) / originalPrice!) * 100).round()}% OFF'
                               : '25% OFF',
                           style: GoogleFonts.poppins(
-                            fontSize: 8,
+                            fontSize: 7,
                             fontWeight: FontWeight.w600,
                             color: Colors.white,
                           ),

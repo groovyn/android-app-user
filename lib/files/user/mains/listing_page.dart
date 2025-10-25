@@ -37,6 +37,19 @@ class ListingPageState extends State<ListingPage> with TickerProviderStateMixin 
 
   final int pageSize = 10;
 
+  // Category filter
+  String? selectedCategory;
+  final List<String> categories = [
+    "All",
+    "Wedding",
+    "Party",
+    "Festive",
+    "Casual",
+    "Ethnic",
+    "Western",
+    "Kids"
+  ];
+
   // Sort and Filter state
   SortOption currentSort = SortOption.popularity;
   FilterOptions currentFilter = FilterOptions();
@@ -228,14 +241,27 @@ class ListingPageState extends State<ListingPage> with TickerProviderStateMixin 
   }
 
   void _applySortAndFilter() {
-    List<Map<String, dynamic>> productsToFilter = searchController.text.isEmpty 
-        ? allProducts 
-        : allProducts.where((product) =>
-            product['productName']
-                .toString()
-                .toLowerCase()
-                .contains(searchController.text.toLowerCase())
-          ).toList();
+    List<Map<String, dynamic>> productsToFilter = allProducts.where((product) {
+      // Search filter
+      if (searchController.text.isNotEmpty) {
+        final productName = product['productName']?.toString().toLowerCase() ?? '';
+        if (!productName.contains(searchController.text.toLowerCase())) {
+          return false;
+        }
+      }
+
+      // Category filter
+      if (selectedCategory != null && selectedCategory != "All") {
+        final productName = product['productName']?.toString().toLowerCase() ?? '';
+        final productCategory = product['productCategory']?.toString().toLowerCase() ?? '';
+        if (!productName.contains(selectedCategory!.toLowerCase()) &&
+            !productCategory.contains(selectedCategory!.toLowerCase())) {
+          return false;
+        }
+      }
+
+      return true;
+    }).toList();
 
     filteredRentals = ProductSortFilterService.applySortAndFilter(
       products: productsToFilter,
@@ -312,6 +338,59 @@ class ListingPageState extends State<ListingPage> with TickerProviderStateMixin 
       inStock: currentFilter.inStock,
     );
     _applyFilter(newFilter);
+  }
+
+  void _showCategoryFilterDialog() {
+    String? tempSelectedCategory = selectedCategory;
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Select Category', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView(
+                  shrinkWrap: true,
+                  children: categories.map((category) {
+                    return RadioListTile<String>(
+                      title: Text(category, style: GoogleFonts.poppins()),
+                      value: category,
+                      groupValue: tempSelectedCategory ?? "All",
+                      activeColor: const Color(0xFF6366F1),
+                      onChanged: (String? value) {
+                        setDialogState(() {
+                          tempSelectedCategory = value;
+                        });
+                      },
+                    );
+                  }).toList(),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel', style: GoogleFonts.poppins(color: Colors.grey)),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      selectedCategory = tempSelectedCategory;
+                      _applySortAndFilter();
+                    });
+                    Navigator.pop(context);
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF6366F1)),
+                  child: Text('Apply', style: GoogleFonts.poppins(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showPriceRangeDialog() {
@@ -669,7 +748,9 @@ class ListingPageState extends State<ListingPage> with TickerProviderStateMixin 
           children: [
             const SizedBox(height: 20),
             _buildSearchBar(),
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
+            _buildCategoryScroller(),
+            const SizedBox(height: 16),
             _buildRentalsList(),
           ],
         ),
@@ -677,6 +758,53 @@ class ListingPageState extends State<ListingPage> with TickerProviderStateMixin 
       floatingActionButton: _buildBottomSortFilter(),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: returnBottomBar(context),
+    );
+  }
+
+  Widget _buildCategoryScroller() {
+    return Container(
+      height: 50,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: categories.length,
+        itemBuilder: (context, index) {
+          final category = categories[index];
+          final isSelected = selectedCategory == category || (selectedCategory == null && category == "All");
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                selectedCategory = category;
+                _applySortAndFilter();
+              });
+            },
+            child: Container(
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: isSelected ? Colors.black : Colors.white,
+                borderRadius: BorderRadius.circular(25),
+                border: Border.all(
+                  color: isSelected ? Colors.black : Colors.grey.shade300,
+                  width: 1,
+                ),
+              ),
+              child: Center(
+                child: Text(
+                  category,
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                    color: isSelected ? Colors.white : Colors.black87,
+                    letterSpacing: 0.2,
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -959,6 +1087,7 @@ class ListingPageState extends State<ListingPage> with TickerProviderStateMixin 
                       onPressed: () {
                         setState(() {
                           currentFilter = FilterOptions();
+                          selectedCategory = null;
                           _applySortAndFilter();
                         });
                         Navigator.pop(context);
@@ -976,6 +1105,7 @@ class ListingPageState extends State<ListingPage> with TickerProviderStateMixin 
                 ),
                 const SizedBox(height: 10),
                 _buildFilterOption('Price Range', Icons.attach_money),
+                _buildFilterOption('Category', Icons.category),
                 _buildFilterOption('Brand', Icons.business),
                 _buildFilterOption('Size', Icons.straighten),
                 _buildFilterOption('Color', Icons.palette),
@@ -1035,6 +1165,8 @@ class ListingPageState extends State<ListingPage> with TickerProviderStateMixin 
         // Show specific filter dialog based on selection
         if (title == 'Price Range') {
           _showPriceRangeDialog();
+        } else if (title == 'Category') {
+          _showCategoryFilterDialog();
         } else if (title == 'Brand') {
           _showBrandFilterDialog();
         } else if (title == 'Size') {
