@@ -3,7 +3,7 @@ description: "A new Flutter project."
 
 publish_to: 'none'
 
-version: 3.3.3+5
+version: 3.3.3+10
 
 environment:
   sdk: ^3.5.0
@@ -31,6 +31,7 @@ dependencies:
   webview_flutter:
   flexi_productimage_slider:
   pull_to_refresh:
+  cached_network_image: ^3.3.1
 
 dev_dependencies:
   flutter_test:
